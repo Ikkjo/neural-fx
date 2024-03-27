@@ -1,22 +1,6 @@
 
 .DS_Store
-neural_fx_dataset/.DS_Store
-neural_fx_dataset/32bit_fp/DI.wav
-neural_fx_dataset/32bit_fp/ds1_gain_100.wav
-neural_fx_dataset/32bit_fp/ds1_gain_50.wav
-neural_fx_dataset/32bit_fp/ds1_gain_75.wav
-neural_fx_dataset/32bit_fp/full_rig.wav
-neural_fx_dataset/32bit_fp/pearl_clean_sm57.wav
-neural_fx_dataset/32bit_fp/tsmini_gain_100.wav
-neural_fx_dataset/32bit_fp/tsmini_gain_50.wav
-neural_fx_dataset/32bit_fp/tsmini_gain_75.wav
-neural_fx_dataset/DI.wav
-neural_fx_dataset/ds1_gain_100.wav
-neural_fx_dataset/ds1_gain_50.wav
-neural_fx_dataset/ds1_gain_75.wav
-neural_fx_dataset/full_rig.wav
-neural_fx_dataset/pearl_clean_sm57.wav
-neural_fx_dataset/tsmini_gain_100.wav
-neural_fx_dataset/tsmini_gain_50.wav
-neural_fx_dataset/tsmini_gain_75.wav
+neural_fx_dataset/*
+neural_fx_dataset_float/*
 neural-fx/__pycache__/audio.cpython-311.pyc
+
