@@ -5,3 +5,4 @@ neural_fx_dataset_float/*
 neural-fx/__pycache__/audio.cpython-311.pyc
 
 neural_fx/__pycache__/audio.cpython-311.pyc
+neural_fx/__pycache__/wavenet.cpython-311.pyc

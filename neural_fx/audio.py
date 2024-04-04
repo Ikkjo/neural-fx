@@ -80,9 +80,3 @@ def load_dataset(path=DEFAULT_DATASET_DIR, return_tensors=False):
     return dataset
 
 
-if __name__ == "__main__":
-    dataset = load_dataset()
-    waveform = read_wav("neural_fx_dataset_float/DI.wav", return_tensor=True)
-    print(waveform)
-    waveform.resample(16000)
-    print(waveform)
