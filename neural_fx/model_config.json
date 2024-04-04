@@ -1,6 +1,0 @@
-{
-    "num_layers": 10,
-    "num_channels": 3,
-    "kernel_size": 3,
-    "dilation_parameter": 10
-}

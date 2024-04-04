@@ -1,0 +1,15 @@
+{
+    "model": {
+        "num_layers": 10,
+        "num_channels": 3,
+        "kernel_size": 3,
+        "dilation_parameter": 10
+    },
+    "training_arguments": {
+        "target_data": "ds1_gain_100",
+        "batch_size": 32,
+        "num_epochs": 100,
+        "learning_rate": 0.001,
+        "optimizer": "adam"
+    }
+}
