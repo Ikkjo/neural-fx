@@ -13,6 +13,7 @@ setup(
         "scipy",
         "tqdm",
         "matplotlib",
-        "lightning"
+        "lightning",
+        "pyyaml"
     ],
 )
