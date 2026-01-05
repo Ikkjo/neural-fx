@@ -132,8 +132,12 @@ class RNNBlock(nn.Module):
 
         self.params = params
         # This just calls nn.LSTM() if 'block_type' is LSTM, nn.GRU() if GRU, etc
-        recurrent_layer_params = {}
-        self.rec = getattr(nn, params.block_type)(recurrent_layer_params)
+        self.rec = getattr(nn, params.block_type)(
+            input_size=params.input_size,
+            hidden_size=params.hidden_size,
+            num_layers=params.num_layers,
+            batch_first=True,
+        )
         self.lin_bias = params.lin_bias
         self.lin = nn.Linear(params.hidden_units,
                              params.output_size, self.lin_bias)
