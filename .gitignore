@@ -3,4 +3,5 @@
 neural_fx_dataset/*
 neural_fx_dataset_float/*
 neural-fx/__pycache__/audio.cpython-311.pyc
-
+*/lightning_logs/*
+neural_fx.egg-info/*
