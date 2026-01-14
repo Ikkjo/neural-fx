@@ -4,7 +4,7 @@ setup(
     name='neural-fx',
     version='0.1',
     packages=find_packages(where="."),
-    package_dir={'neuralfx': 'neural-fx'},
+    package_dir={'neuralfx': 'neural_fx'},
     include_package_data=True,
     install_requires=[
         "torch",

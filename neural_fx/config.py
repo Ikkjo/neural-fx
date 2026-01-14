@@ -21,6 +21,7 @@ class LSTMParams:
     conv1d: Conv1dConfig | None = None
     skip_connection: bool = False
     dropout: float = 0.0
+    conditioning_size: int = 0
 
 @dataclass
 class WaveNetParams:
