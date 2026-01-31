@@ -7,6 +7,7 @@ RNN_CONFIG_PATH = "./config/models/rnn/"
 
 # TODO: add conv1d layers
 
+
 class RNNConfig():
     def __init__(self, config: dict, **kwargs):
         self.conv1d_strides = config["conv1d_strides"]
@@ -23,6 +24,7 @@ class RNNBlockConfig():
         self.input_size = config["input_size"]
         self.output_size = config["output_size"]
         self.hidden_units = config["hidden_units"]
+        self.num_layers = config["num_layers"]
         self.lin_bias = config["lin_bias"]
         self.skip = config["skip"]
         for key, value in kwargs.items():
@@ -134,7 +136,7 @@ class RNNBlock(nn.Module):
         # This just calls nn.LSTM() if 'block_type' is LSTM, nn.GRU() if GRU, etc
         self.rec = getattr(nn, params.block_type)(
             input_size=params.input_size,
-            hidden_size=params.hidden_size,
+            hidden_units=params.hidden_units,
             num_layers=params.num_layers,
             batch_first=True,
         )

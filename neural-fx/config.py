@@ -7,11 +7,13 @@ import yaml
 # MODEL-SPECIFIC PARAMS
 # =============================================================================
 
+
 @dataclass
 class Conv1dConfig:
     filters: int
     kernel_size: int = 3
     stride: int = 1
+
 
 @dataclass
 class LSTMParams:
@@ -21,6 +23,7 @@ class LSTMParams:
     conv1d: Conv1dConfig | None = None
     skip_connection: bool = False
     dropout: float = 0.0
+
 
 @dataclass
 class WaveNetParams:
@@ -32,18 +35,34 @@ class WaveNetParams:
     residual_channels: int = 16
     skip_channels: int = 32
 
+
 @dataclass
 class SSMParams:
-    """Parameters for state-space models (Mamba, S4)."""
+    """
+    Shared parameters for state-space models (e.g. Mamba, S4).
+
+    Notes
+    -----
+    - ``d_state`` is the latent state dimension and is typically used by both
+      Mamba- and S4-style implementations.
+    - ``d_conv`` controls the size of any local convolutional kernel used in
+      Mamba-style SSMs; S4 implementations in this codebase may ignore it.
+    - ``expand`` is an expansion factor used by some Mamba variants to
+      increase the internal channel width; S4 implementations may ignore it.
+    Implementations for specific architectures are expected to read only the
+    subset of fields that they support; unused fields are safe to ignore.
+    """
     d_state: int = 16
     d_conv: int = 4
     expand: int = 2
+
 
 ModelParamsType = Union[LSTMParams, WaveNetParams, SSMParams]
 
 # =============================================================================
 # SHARED CONFIG SECTIONS
 # =============================================================================
+
 
 @dataclass
 class ModelConfig:
@@ -53,10 +72,12 @@ class ModelConfig:
     output_size: int = 1
     sample_rate: int = 48000
 
+
 @dataclass
 class TBPTTConfig:
     enabled: bool = True
     burn_in: int = 4096
+
 
 @dataclass
 class TrainingConfig:
@@ -66,25 +87,30 @@ class TrainingConfig:
     tbptt: TBPTTConfig | None = None
     seed: int = 42
 
+
 @dataclass
 class OptimizerConfig:
     type: str = "adam"
     lr: float = 0.01
+
 
 @dataclass
 class LRSchedulerConfig:
     type: str = "exponential"
     gamma: float = 0.995
 
+
 @dataclass
 class PreEmphasisConfig:
     enabled: bool = True
     coef: float = 0.85
 
+
 @dataclass
 class LossWeights:
     esr: float = 0.0
     mse: float = 1.0
+
 
 @dataclass
 class LossConfig:
@@ -93,10 +119,12 @@ class LossConfig:
     pre_emphasis: PreEmphasisConfig | None = None
     mask_first: int = 4096
 
+
 @dataclass
 class DataPaths:
     input: str
     target: str
+
 
 @dataclass
 class DataConfig:
@@ -106,6 +134,7 @@ class DataConfig:
 # =============================================================================
 # ROOT CONFIG
 # =============================================================================
+
 
 @dataclass
 class NeuralFXConfig:
@@ -122,6 +151,7 @@ class NeuralFXConfig:
 # LOADER
 # =============================================================================
 
+
 # Factory mapping for model-specific params
 _PARAM_CLASSES = {
     "lstm": LSTMParams,
@@ -131,26 +161,28 @@ _PARAM_CLASSES = {
     "s4": SSMParams,
 }
 
+
 def _load_model_params(model_type: str, params: dict) -> ModelParamsType:
     """Load model-specific params using the appropriate dataclass."""
     cls = _PARAM_CLASSES.get(model_type)
     if cls is None:
         raise ValueError(f"Unknown model type: {model_type}")
-    
+
     # Handle nested conv1d for LSTM/GRU
     if cls == LSTMParams and "conv1d" in params:
         params = params.copy()
         params["conv1d"] = Conv1dConfig(**params["conv1d"])
-    
+
     return cls(**params)
+
 
 def load_config(path: Path | str) -> NeuralFXConfig:
     """Load and parse a YAML config file."""
     with open(path) as f:
         d = yaml.safe_load(f)
-    
+
     model_type = d["model"]["type"]
-    
+
     return NeuralFXConfig(
         version=d["version"],
         name=d["name"],
@@ -165,15 +197,18 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             batch_size=d["training"].get("batch_size", 32),
             epochs=d["training"].get("epochs", 100),
             segment_length=d["training"].get("segment_length", 8192),
-            tbptt=TBPTTConfig(**d["training"]["tbptt"]) if "tbptt" in d["training"] else None,
+            tbptt=TBPTTConfig(**d["training"]["tbptt"]
+                              ) if "tbptt" in d["training"] else None,
             seed=d["training"].get("seed", 42),
         ),
         optimizer=OptimizerConfig(**d["optimizer"]),
         lr_scheduler=LRSchedulerConfig(**d["lr_scheduler"]),
         loss=LossConfig(
             type=d["loss"]["type"],
-            weights=LossWeights(**d["loss"]["weights"]) if "weights" in d["loss"] else None,
-            pre_emphasis=PreEmphasisConfig(**d["loss"]["pre_emphasis"]) if "pre_emphasis" in d["loss"] else None,
+            weights=LossWeights(**d["loss"]["weights"]
+                                ) if "weights" in d["loss"] else None,
+            pre_emphasis=PreEmphasisConfig(
+                **d["loss"]["pre_emphasis"]) if "pre_emphasis" in d["loss"] else None,
             mask_first=d["loss"].get("mask_first", 4096),
         ),
         data=DataConfig(
