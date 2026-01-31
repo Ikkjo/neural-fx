@@ -31,8 +31,8 @@ class BaseNeuralFXModel(nn.Module, ABC):
         """Detach state from computation graph for TBPTT."""
         pass  # Override in stateful models
 
-    # Validation 
-    @abstractmethod 
+    # Validation
+    @abstractmethod
     def process_sample(self, x: Tensor) -> Tensor:
         """Single-sample forward for validating exported models."""
         ...
