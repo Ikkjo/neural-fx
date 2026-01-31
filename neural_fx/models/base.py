@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union, Tuple, List
+from typing import Dict, Any
 from pathlib import Path
 import torch.nn as nn
 from torch import Tensor
-
-StateType = Optional[Union[Tensor, Tuple[Tensor, ...], List[Tensor]]]
 
 
 class BaseNeuralFXModel(nn.Module, ABC):

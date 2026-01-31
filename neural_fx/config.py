@@ -26,6 +26,7 @@ class LSTMParams:
     conditioning_size: int = 0
 
 
+
 @dataclass
 class WaveNetParams:
     """Parameters for WaveNet models."""
@@ -185,14 +186,14 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     model_type = d["model"]["type"]
 
     return NeuralFXConfig(
-        version=d["version"],
-        name=d["name"],
+        version=version,
+        name=name,
         model=ModelConfig(
             type=model_type,
-            params=_load_model_params(model_type, d["model"]["params"]),
-            input_size=d["model"].get("input_size", 1),
-            output_size=d["model"].get("output_size", 1),
-            sample_rate=d["model"].get("sample_rate", 48000),
+            params=_load_model_params(model_type, model_params),
+            input_size=model_cfg.get("input_size", 1),
+            output_size=model_cfg.get("output_size", 1),
+            sample_rate=model_cfg.get("sample_rate", 48000),
         ),
         training=TrainingConfig(
             batch_size=d["training"].get("batch_size", 32),
@@ -202,8 +203,8 @@ def load_config(path: Path | str) -> NeuralFXConfig:
                               ) if "tbptt" in d["training"] else None,
             seed=d["training"].get("seed", 42),
         ),
-        optimizer=OptimizerConfig(**d["optimizer"]),
-        lr_scheduler=LRSchedulerConfig(**d["lr_scheduler"]),
+        optimizer=OptimizerConfig(**optimizer_cfg),
+        lr_scheduler=LRSchedulerConfig(**lr_scheduler_cfg),
         loss=LossConfig(
             type=d["loss"]["type"],
             weights=LossWeights(**d["loss"]["weights"]
@@ -213,7 +214,7 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             mask_first=d["loss"].get("mask_first", 4096),
         ),
         data=DataConfig(
-            train=DataPaths(**d["data"]["train"]),
-            sample_rate=d["data"].get("sample_rate", 48000),
+            train=DataPaths(**train_data_cfg),
+            sample_rate=data_cfg.get("sample_rate", 48000),
         ),
     )
