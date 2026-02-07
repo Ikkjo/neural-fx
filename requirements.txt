@@ -1,9 +1,0 @@
-torch
-torchaudio
-numpy
-scipy
-tqdm
-matplotlib
-lightning
-pyyaml
-pytest
