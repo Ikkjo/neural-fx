@@ -1,4 +1,3 @@
-
 .DS_Store
 neural_fx_dataset/*
 neural_fx_dataset_float/*
@@ -9,3 +8,4 @@ GEMINI.md
 AGENTS.md
 TODO.md
 .opencode
+.ipynb_checkpoints
