@@ -183,7 +183,15 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     with open(path) as f:
         d = yaml.safe_load(f)
 
-    model_type = d["model"]["type"]
+    version = d["version"]
+    name = d["name"]
+    model_cfg = d["model"]
+    model_type = model_cfg["type"]
+    model_params = model_cfg.get("params", {})
+    optimizer_cfg = d.get("optimizer", {"type": "adam", "lr": 0.01})
+    lr_scheduler_cfg = d.get("lr_scheduler", {"type": "exponential", "gamma": 0.995})
+    data_cfg = d["data"]
+    train_data_cfg = data_cfg["train"]
 
     return NeuralFXConfig(
         version=version,

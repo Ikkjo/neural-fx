@@ -1,3 +1,5 @@
+from neural_fx.models.recurrent import NeuralfxLSTM, NeuralfxGRU
+from neural_fx.config import ModelConfig, LSTMParams, Conv1dConfig
 import torch
 import pytest
 import sys
@@ -6,8 +8,6 @@ import os
 # Ensure the package is in the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from neural_fx.config import ModelConfig, LSTMParams, Conv1dConfig
-from neural_fx.models.recurrent import NeuralfxLSTM, NeuralfxGRU
 
 class TestRecurrentModels:
     @pytest.fixture
@@ -31,7 +31,7 @@ class TestRecurrentModels:
         params = LSTMParams(
             hidden_size=20,
             num_layers=1,
-            conv1d=None, # No conv
+            conv1d=None,  # No conv
             conditioning_size=0
         )
         return ModelConfig(
@@ -44,41 +44,41 @@ class TestRecurrentModels:
     def test_lstm_forward_shape(self, lstm_config):
         """Test LSTM forward pass output shape with convolution and conditioning."""
         model = NeuralfxLSTM(lstm_config)
-        
+
         # Input: [Batch, Channels, Time]
         # Length 1024 is divisible by stride 4
-        x = torch.randn(2, 1, 1024) 
-        cond = torch.randn(2, 2) # Conditioning [Batch, C_cond]
-        
+        x = torch.randn(2, 1, 1024)
+        cond = torch.randn(2, 2)  # Conditioning [Batch, C_cond]
+
         y = model(x, conditioning=cond)
-        
+
         assert y.shape == x.shape, f"Output shape mismatch! {y.shape} != {x.shape}"
 
     def test_gru_forward_shape(self, gru_config):
         """Test GRU forward pass output shape without convolution."""
         model = NeuralfxGRU(gru_config)
-        
+
         x = torch.randn(2, 1, 100)
         y = model(x)
-        
+
         assert y.shape == x.shape
 
     def test_state_management(self, lstm_config):
         """Test resetting and detaching state."""
         model = NeuralfxLSTM(lstm_config)
         x = torch.randn(1, 1, 100)
-        
+
         # Run once to populate state
         model(x)
         assert model.hidden_state is not None
-        
+
         # Detach
         model.detach_state()
         if isinstance(model.hidden_state, tuple):
             assert not model.hidden_state[0].requires_grad
         else:
             assert not model.hidden_state.requires_grad
-            
+
         # Reset
         model.reset_state()
         assert model.hidden_state is None
@@ -87,10 +87,10 @@ class TestRecurrentModels:
         """Test single sample processing."""
         model = NeuralfxLSTM(lstm_config)
         model.eval()
-        
+
         # Single sample input [Channels]
         x = torch.randn(1)
         y = model.process_sample(x)
-        
+
         assert y.ndim == 0 or y.ndim == 1
         assert model.hidden_state is not None
