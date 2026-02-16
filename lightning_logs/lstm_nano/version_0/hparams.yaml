@@ -1,0 +1,8 @@
+batch_size: 32
+loss_type: mse
+lr: 0.01
+model_type: lstm
+optimizer: adam
+sample_rate: 48000
+scheduler: exponential
+segment_length: 8192

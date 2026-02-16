@@ -16,14 +16,10 @@ class TestRecurrentModels:
             hidden_size=20,
             num_layers=1,
             conv1d=Conv1dConfig(filters=16, kernel_size=3, stride=4),
-            conditioning_size=2
+            conditioning_size=2,
         )
         return ModelConfig(
-            type="lstm",
-            params=params,
-            input_size=1,
-            output_size=1,
-            sample_rate=48000
+            type="lstm", params=params, input_size=1, output_size=1, sample_rate=48000
         )
 
     @pytest.fixture
@@ -32,14 +28,9 @@ class TestRecurrentModels:
             hidden_size=20,
             num_layers=1,
             conv1d=None,  # No conv
-            conditioning_size=0
+            conditioning_size=0,
         )
-        return ModelConfig(
-            type="gru",
-            params=params,
-            input_size=1,
-            output_size=1
-        )
+        return ModelConfig(type="gru", params=params, input_size=1, output_size=1)
 
     def test_lstm_forward_shape(self, lstm_config):
         """Test LSTM forward pass output shape with convolution and conditioning."""

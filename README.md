@@ -72,6 +72,45 @@ python scripts/export.py \
 | large | 96 | 2 | 36 | 3 | ~61K |
 | xl | 128 | 2 | 36 | 3 | ~103K |
 
+## Using NAM-Style Test Signals
+
+The system supports both real audio recordings and NAM-style test tone signals for training:
+
+### NAM Test Tones
+
+[NAM (Neural Amp Modeler)](https://github.com/sdatkinson/neural-amp-modeler) uses specialized test signals with **blips** (impulse spikes) for precise latency calibration. These signals provide:
+- Clean impulse responses for accurate delay measurement
+- Replicability checks that pass cleanly (low ESR)
+- Standardized input files for consistent results
+
+### Training with NAM Inputs
+
+To use NAM-style inputs, set the latency method to `blip` for automatic detection:
+
+```bash
+python scripts/train.py \
+    --config configs/models/lstm/lstm_nano_nam.yaml \
+    --latency_method blip
+```
+
+### NAM Configuration Example
+
+```yaml
+# NAM-specific configuration
+latency:
+  enabled: true
+  method: "blip"  # Use blip detection for NAM inputs
+  manual_delay: null
+  max_delay: 10000
+
+data:
+  train:
+    input: "data/nam_input_v3.wav"  # NAM v3 standard input
+    target: "data/nam_output.wav"
+```
+
+The replicability check will typically show low ESR values (< 0.01) with NAM inputs, indicating the model can accurately replicate the target signal.
+
 ## Configuration
 
 Models are configured via YAML files. Example:

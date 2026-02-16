@@ -1,0 +1,103 @@
+{
+  "checkpoint_file": "epoch=03-val_loss=0.0000.ckpt",
+  "git_commit": "d8f672645348abcba37ebbc9d4928d26350025bb",
+  "config": {
+    "version": "1.0",
+    "name": "lstm_nano",
+    "model": {
+      "type": "lstm",
+      "params": {
+        "hidden_size": 20,
+        "num_layers": 1,
+        "conv1d": {
+          "filters": 16,
+          "kernel_size": 3,
+          "stride": 4
+        },
+        "skip_connection": false,
+        "dropout": 0.0,
+        "conditioning_size": 0
+      },
+      "input_size": 1,
+      "output_size": 1,
+      "sample_rate": 48000
+    },
+    "training": {
+      "batch_size": 32,
+      "epochs": 100,
+      "segment_length": 8192,
+      "random_segments": false,
+      "tbptt": {
+        "enabled": true,
+        "burn_in": 4096
+      },
+      "seed": 42,
+      "augmentation": null
+    },
+    "optimizer": {
+      "type": "adam",
+      "lr": 0.01
+    },
+    "lr_scheduler": {
+      "type": "exponential",
+      "gamma": 0.995
+    },
+    "loss": {
+      "type": "mse",
+      "weights": {
+        "esr": 0.0,
+        "mse": 1.0,
+        "stft": 0.0
+      },
+      "pre_emphasis": {
+        "enabled": true,
+        "coef": 0.85
+      },
+      "mask_first": 4096,
+      "stft": null
+    },
+    "data": {
+      "train": {
+        "input": "data/DI.wav",
+        "target": "data/pearl_clean_sm57.wav"
+      },
+      "val": null,
+      "sample_rate": 48000
+    },
+    "latency": {
+      "enabled": true,
+      "method": "xcorr",
+      "manual_delay": null,
+      "max_delay": 1000
+    },
+    "validation": {
+      "enabled": true,
+      "check_clipping": true,
+      "check_dc_offset": true,
+      "ignore_warnings": false
+    }
+  },
+  "training_info": {
+    "epochs_trained": 4,
+    "global_step": 652,
+    "best_val_loss": null,
+    "current_val_loss": null,
+    "current_train_loss": 0.003779248334467411,
+    "hardware": {
+      "cuda_available": true,
+      "gpu_count": 1,
+      "gpu_name": "NVIDIA GeForce RTX 3050 OEM",
+      "cuda_version": "12.4"
+    }
+  },
+  "data_info": {
+    "input_file": "data/DI.wav",
+    "target_file": "data/pearl_clean_sm57.wav",
+    "latency_calibration": {
+      "delay_samples": 244,
+      "method": "xcorr",
+      "correlation_score": 0.6762781677474442
+    }
+  },
+  "saved_at": "2026-02-16T14:13:57.564409+00:00"
+}

@@ -11,12 +11,24 @@ from neural_fx.models.recurrent import RecurrentNeuralFXModel
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export trained neural audio effects model")
-    parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
-    parser.add_argument("--output_dir", type=str, default="./exports", help="Output directory")
-    parser.add_argument("--formats", type=str, default="onnx,torchscript,rtneural",
-                        help="Comma-separated export formats")
+    parser = argparse.ArgumentParser(
+        description="Export trained neural audio effects model"
+    )
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to config YAML file"
+    )
+    parser.add_argument(
+        "--checkpoint", type=str, required=True, help="Path to model checkpoint"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="./exports", help="Output directory"
+    )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default="onnx,torchscript,rtneural",
+        help="Comma-separated export formats",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
