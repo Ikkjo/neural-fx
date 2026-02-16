@@ -1,8 +1,7 @@
 .DS_Store
 neural_fx_dataset/*
 neural_fx_dataset_float/*
-**/__pycache__/
-**/*.pyc
+__pycache__/
 *.pyc
 */lightning_logs/*
 neural_fx.egg-info/*
