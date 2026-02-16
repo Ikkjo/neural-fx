@@ -10,3 +10,4 @@ AGENTS.md
 TODO.md
 .opencode
 .ipynb_checkpoints
+.ruff_cache
