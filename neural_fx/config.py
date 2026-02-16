@@ -18,16 +18,19 @@ class Conv1dConfig:
 @dataclass
 class LSTMParams:
     """Parameters for LSTM and GRU models."""
+
     hidden_size: int
     num_layers: int = 2
     conv1d: Conv1dConfig | None = None
     skip_connection: bool = False
     dropout: float = 0.0
+    conditioning_size: int = 0
 
 
 @dataclass
 class WaveNetParams:
     """Parameters for WaveNet models."""
+
     layers: int
     stacks: int = 3
     kernel_size: int = 3
@@ -52,6 +55,7 @@ class SSMParams:
     Implementations for specific architectures are expected to read only the
     subset of fields that they support; unused fields are safe to ignore.
     """
+
     d_state: int = 16
     d_conv: int = 4
     expand: int = 2
@@ -131,6 +135,7 @@ class DataConfig:
     train: DataPaths
     sample_rate: int = 48000
 
+
 # =============================================================================
 # ROOT CONFIG
 # =============================================================================
@@ -146,6 +151,7 @@ class NeuralFXConfig:
     lr_scheduler: LRSchedulerConfig
     loss: LossConfig
     data: DataConfig
+
 
 # =============================================================================
 # LOADER
@@ -179,58 +185,17 @@ def _load_model_params(model_type: str, params: dict) -> ModelParamsType:
 def load_config(path: Path | str) -> NeuralFXConfig:
     """Load and parse a YAML config file."""
     with open(path) as f:
-
-def _ensure_mapping(value, context: str) -> dict:
-    """Ensure that a configuration section is a mapping (dict)."""
-    if not isinstance(value, dict):
-        raise ValueError(f"Expected '{context}' to be a mapping, got {type(value).__name__}")
-    return value
-
-
-def _get_required(mapping, key: str, context: str):
-    """
-    Retrieve a required key from a mapping, raising a ValueError with a
-    descriptive message if the key is missing or the object is not a mapping.
-    """
-    if not isinstance(mapping, dict):
-        raise ValueError(f"Expected '{context}' to be a mapping when looking for key '{key}', "
-                         f"got {type(mapping).__name__}")
-    try:
-        return mapping[key]
-    except KeyError:
-        raise ValueError(f"Missing required field '{key}' in '{context}' section") from None
-
-
-def load_config(path: Path | str) -> NeuralFXConfig:
-    """Load and parse a YAML config file."""
-    with open(path) as f:
         d = yaml.safe_load(f)
 
-    # Top-level config must be a mapping
-    d = _ensure_mapping(d, "config")
-
-    # Required top-level fields
-    version = _get_required(d, "version", "config")
-    name = _get_required(d, "name", "config")
-
-    # Model section
-    model_cfg = _ensure_mapping(_get_required(d, "model", "config"), "model")
-    model_type = _get_required(model_cfg, "type", "model")
-    model_params = _ensure_mapping(_get_required(model_cfg, "params", "model"), "model.params")
-
-    # Training section
-    training_cfg = _ensure_mapping(_get_required(d, "training", "config"), "training")
-
-    # Optimizer and LR scheduler sections
-    optimizer_cfg = _ensure_mapping(_get_required(d, "optimizer", "config"), "optimizer")
-    lr_scheduler_cfg = _ensure_mapping(_get_required(d, "lr_scheduler", "config"), "lr_scheduler")
-
-    # Loss section
-    loss_cfg = _ensure_mapping(_get_required(d, "loss", "config"), "loss")
-
-    # Data section
-    data_cfg = _ensure_mapping(_get_required(d, "data", "config"), "data")
-    train_data_cfg = _ensure_mapping(_get_required(data_cfg, "train", "data"), "data.train")
+    version = d["version"]
+    name = d["name"]
+    model_cfg = d["model"]
+    model_type = model_cfg["type"]
+    model_params = model_cfg.get("params", {})
+    optimizer_cfg = d.get("optimizer", {"type": "adam", "lr": 0.01})
+    lr_scheduler_cfg = d.get("lr_scheduler", {"type": "exponential", "gamma": 0.995})
+    data_cfg = d["data"]
+    train_data_cfg = data_cfg["train"]
 
     return NeuralFXConfig(
         version=version,
@@ -243,19 +208,25 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             sample_rate=model_cfg.get("sample_rate", 48000),
         ),
         training=TrainingConfig(
-            batch_size=training_cfg.get("batch_size", 32),
-            epochs=training_cfg.get("epochs", 100),
-            segment_length=training_cfg.get("segment_length", 8192),
-            tbptt=TBPTTConfig(**training_cfg["tbptt"]) if "tbptt" in training_cfg else None,
-            seed=training_cfg.get("seed", 42),
+            batch_size=d["training"].get("batch_size", 32),
+            epochs=d["training"].get("epochs", 100),
+            segment_length=d["training"].get("segment_length", 8192),
+            tbptt=TBPTTConfig(**d["training"]["tbptt"])
+            if "tbptt" in d["training"]
+            else None,
+            seed=d["training"].get("seed", 42),
         ),
         optimizer=OptimizerConfig(**optimizer_cfg),
         lr_scheduler=LRSchedulerConfig(**lr_scheduler_cfg),
         loss=LossConfig(
-            type=_get_required(loss_cfg, "type", "loss"),
-            weights=LossWeights(**loss_cfg["weights"]) if "weights" in loss_cfg else None,
-            pre_emphasis=PreEmphasisConfig(**loss_cfg["pre_emphasis"]) if "pre_emphasis" in loss_cfg else None,
-            mask_first=loss_cfg.get("mask_first", 4096),
+            type=d["loss"]["type"],
+            weights=LossWeights(**d["loss"]["weights"])
+            if "weights" in d["loss"]
+            else None,
+            pre_emphasis=PreEmphasisConfig(**d["loss"]["pre_emphasis"])
+            if "pre_emphasis" in d["loss"]
+            else None,
+            mask_first=d["loss"].get("mask_first", 4096),
         ),
         data=DataConfig(
             train=DataPaths(**train_data_cfg),
