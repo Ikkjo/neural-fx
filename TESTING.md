@@ -345,15 +345,54 @@ mypy neural_fx/
 - `test_state_management`: Tests state reset, detach, and persistence
 - `test_process_sample`: Tests single-sample inference mode
 
+**`tests/test_data.py`** - AudioDataset tests
+- `test_dataset_creation`: Dataset initialization from file pairs
+- `test_dataset_getitem`: Getting items returns correct shapes
+- `test_dataset_length_consistency`: Mismatched input/target lengths handled
+- `test_dataset_file_not_found`: Missing files raise appropriate errors
+- `test_dataset_resampling`: Audio resampled to target sample rate
+- `test_dataset_normalization`: Audio normalization works correctly
+- `test_dataset_stereo_to_mono`: Stereo audio converted to mono
+
+**`tests/test_export.py`** - Model export tests
+- `test_onnx_export_simple_lstm`: ONNX export for LSTM
+- `test_onnx_export_lstm_with_conv`: ONNX export with convolution
+- `test_torchscript_export_simple_lstm`: TorchScript export for LSTM
+- `test_torchscript_export_gru`: TorchScript export for GRU
+- `test_rtneural_export_simple_lstm`: RTNeural JSON export for LSTM
+- `test_rtneural_export_lstm_with_conv`: RTNeural export includes conv layers
+- `test_rtneural_export_gru`: RTNeural export for GRU
+- `test_export_creates_directories`: Export creates parent directories
+- `test_exported_model_consistency`: Exported models produce consistent outputs
+
+**`tests/test_inference.py`** - Streaming inference tests
+- `test_streaming_processor_creation`: StreamingProcessor initialization
+- `test_streaming_processor_process_sample`: Single-sample processing
+- `test_streaming_processor_process_block`: Block processing
+- `test_streaming_processor_reset`: State reset functionality
+- `test_streaming_processor_stateful`: State maintained between calls
+- `test_load_audio`: Audio file loading
+- `test_save_audio`: Audio file saving
+- `test_process_audio`: Audio processing through model
+- `test_evaluate_model`: Model evaluation metrics
+
+**`tests/test_training.py`** - Lightning module tests
+- `test_module_creation`: NeuralFXModule initialization
+- `test_forward_pass`: Forward pass through module
+- `test_training_step_no_tbptt`: Training without TBPTT
+- `test_training_step_with_tbptt`: Training with TBPTT enabled
+- `test_validation_step`: Validation step
+- `test_configure_optimizers`: Optimizer configuration (Adam, AdamW, SGD)
+- `test_burn_in_excluded_from_loss`: Burn-in excluded from loss
+- `test_loss_with_esr_weight`: ESR loss weighting
+- `test_gru_model_with_module`: GRU compatibility
+
 ### Planned Test Coverage
 
 Future test files to implement:
 - `tests/test_wavenet.py`: WaveNet model architecture tests
 - `tests/test_ssm.py`: State-space model tests (Mamba, S4)
-- `tests/test_data.py`: AudioDataset and data transform tests
 - `tests/test_config.py`: Configuration loading and validation tests
-- `tests/test_export.py`: ONNX, TorchScript, RTNeural export tests
-- `tests/test_training.py`: LightningModule and training loop tests
 
 ## Writing Tests for New Models
 

@@ -1,10 +1,13 @@
-from typing import Dict, Any, Optional, Union
+import json
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from ..config import ModelConfig, LSTMParams, _load_model_params
+from ..config import LSTMParams, ModelConfig, _load_model_params
 from .base import BaseNeuralFXModel
 
 
@@ -32,9 +35,9 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                     out_channels=self.params.conv1d.filters,
                     kernel_size=self.params.conv1d.kernel_size,
                     stride=self.params.conv1d.stride,
-                    padding=(self.params.conv1d.kernel_size - 1) // 2
+                    padding=(self.params.conv1d.kernel_size - 1) // 2,
                 ),
-                nn.ELU()
+                nn.ELU(),
             )
             rnn_input_size = self.params.conv1d.filters
 
@@ -42,8 +45,8 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             self.skip_projection = None
             if self.params.skip_connection:
                 needs_projection = (
-                    self.params.conv1d.stride > 1 or
-                    config.input_size != config.output_size
+                    self.params.conv1d.stride > 1
+                    or config.input_size != config.output_size
                 )
                 if needs_projection:
                     self.skip_projection = nn.Conv1d(
@@ -58,7 +61,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                     kernel_size=self.params.conv1d.kernel_size,
                     stride=self.params.conv1d.stride,
                     padding=(self.params.conv1d.kernel_size - 1) // 2,
-                    output_padding=self.params.conv1d.stride - 1  # Ensure length match
+                    output_padding=self.params.conv1d.stride - 1,  # Ensure length match
                 )
 
         # Add conditioning channels to RNN input
@@ -77,10 +80,13 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
     def _build_rnn(self, input_size: int) -> nn.Module:
         raise NotImplementedError
 
-    def forward(self, x: Tensor,
-                conditioning: Optional[Tensor] = None,
-                reset_state=False,
-                detach_state=False) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        conditioning: Optional[Tensor] = None,
+        reset_state=False,
+        detach_state=False,
+    ) -> Tensor:
         # x: [Batch, Channels, Time]
         identity = x
 
@@ -97,7 +103,8 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             if conditioning is None:
                 # Default to zeros if not provided
                 conditioning = torch.zeros(
-                    x.shape[0], self.params.conditioning_size, device=x.device)
+                    x.shape[0], self.params.conditioning_size, device=x.device
+                )
 
             # conditioning: [Batch, C_cond] or [Batch, C_cond, Time]
             if conditioning.ndim == 2:
@@ -108,12 +115,12 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                 if cond.shape[2] != x.shape[2]:
                     cond = F.interpolate(cond, size=x.shape[2])
             else:
-                raise ValueError(
-                    f"Invalid conditioning shape: {conditioning.shape}")
+                raise ValueError(f"Invalid conditioning shape: {conditioning.shape}")
 
             if cond.shape[1] != self.params.conditioning_size:
                 raise ValueError(
-                    f"Expected {self.params.conditioning_size} conditioning channels, got {cond.shape[1]}")
+                    f"Expected {self.params.conditioning_size} conditioning channels, got {cond.shape[1]}"
+                )
 
             x = torch.cat([x, cond], dim=1)
 
@@ -136,8 +143,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         # Skip Connection
         if self.params.skip_connection:
-            skip = self.skip_projection(
-                identity) if self.skip_projection else identity
+            skip = self.skip_projection(identity) if self.skip_projection else identity
             if x.shape == skip.shape:
                 x = x + skip
 
@@ -178,13 +184,261 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                 rf = rf * self.params.conv1d.stride  # Approximate
         return rf
 
-    # Export stubs
-    def export_onnx(self, path, opset_version=17): pass
-    def export_torchscript(self, path): pass
-    def export_rtneural(self, path): pass
+    def export_onnx(self, path: str | Path, opset_version: int = 17) -> None:
+        """Export model to ONNX format."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.eval()
+        self.reset_state()
+
+        dummy_input = torch.randn(1, self.config.input_size, 512)
+        if self.params.conditioning_size > 0:
+            dummy_cond = torch.randn(1, self.params.conditioning_size)
+        else:
+            dummy_cond = None
+
+        input_names = ["input"]
+        output_names = ["output"]
+        dynamic_axes = {
+            "input": {0: "batch_size", 2: "time"},
+            "output": {0: "batch_size", 2: "time"},
+        }
+
+        args = (dummy_input, dummy_cond) if dummy_cond is not None else (dummy_input,)
+
+        torch.onnx.export(
+            self,
+            args,
+            path,
+            input_names=input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            opset_version=opset_version,
+            do_constant_folding=True,
+        )
+
+    def export_torchscript(self, path: str | Path) -> None:
+        """Export model to TorchScript format."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.eval()
+
+        # Create a stateless wrapper for export
+        class TorchScriptWrapper(torch.nn.Module):
+            def __init__(self, model: "RecurrentNeuralFXModel"):
+                super().__init__()
+                self.conv1d = model.conv1d
+                self.conv_transpose = model.conv_transpose
+                self.rnn = model.rnn
+                self.fc_out = model.fc_out
+                self.skip_projection = getattr(model, "skip_projection", None)
+                self.params = model.params
+                self.config = model.config
+
+            def forward(self, x: Tensor) -> Tensor:
+                identity = x
+
+                if self.conv1d is not None:
+                    x = self.conv1d(x)
+
+                x = x.transpose(1, 2)
+                x, _ = self.rnn(x, None)  # stateless - always pass None
+                x = self.fc_out(x)
+                x = x.transpose(1, 2)
+
+                if self.conv_transpose is not None:
+                    x = self.conv_transpose(x)
+
+                if self.params.skip_connection:
+                    skip = (
+                        self.skip_projection(identity)
+                        if self.skip_projection
+                        else identity
+                    )
+                    if x.shape == skip.shape:
+                        x = x + skip
+
+                return x
+
+        wrapper = TorchScriptWrapper(self)
+
+        # Use tracing for stateless export
+        dummy_input = torch.randn(1, self.config.input_size, 512)
+        scripted = torch.jit.trace(wrapper, dummy_input)
+        scripted.save(str(path))
+
+    def export_rtneural(self, path: str | Path) -> None:
+        """Export model to RTNeural JSON format."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.eval()
+
+        model_dict: dict[str, Any] = {
+            "in_shape": [None, None, self.config.input_size],
+            "layers": [],
+        }
+
+        # Add Conv1D layer if present
+        if self.conv1d is not None:
+            conv_layer = self._export_rtneural_conv1d()
+            model_dict["layers"].append(conv_layer)
+
+        # Add RNN layers
+        rnn_type = "lstm" if self.config.type == "lstm" else "gru"
+        for layer_idx in range(self.params.num_layers):
+            rnn_layer = self._export_rtneural_rnn(layer_idx, rnn_type)
+            model_dict["layers"].append(rnn_layer)
+
+        # Add Dense output layer
+        dense_layer = self._export_rtneural_dense()
+        model_dict["layers"].append(dense_layer)
+
+        # Add ConvTranspose if present
+        if self.conv_transpose is not None:
+            convt_layer = self._export_rtneural_convtranspose()
+            model_dict["layers"].append(convt_layer)
+
+        with open(path, "w") as f:
+            json.dump(model_dict, f, indent=2)
+
+    def _export_rtneural_conv1d(self) -> dict[str, Any]:
+        conv = self.conv1d[0]  # Get Conv1d from Sequential
+        activation = self.conv1d[1]  # Get activation
+
+        layer_dict: dict[str, Any] = {
+            "type": "conv1d",
+            "activation": "elu" if isinstance(activation, nn.ELU) else "tanh",
+            "shape": [None, None, conv.out_channels],
+            "kernel_size": conv.kernel_size[0],
+            "dilation": conv.dilation[0],
+            "groups": conv.groups,
+            "weights": [],
+        }
+
+        # Conv1d weights: [out_channels, in_channels, kernel_size]
+        # Transpose to [kernel_size, in_channels, out_channels] for RTNeural
+        weight = conv.weight.data
+        weight_rtneural = weight.permute(2, 1, 0).cpu().numpy().tolist()
+        bias = (
+            conv.bias.data.cpu().numpy().tolist()
+            if conv.bias is not None
+            else [0.0] * conv.out_channels
+        )
+
+        layer_dict["weights"] = [weight_rtneural, bias]
+        return layer_dict
+
+    def _export_rtneural_rnn(self, layer_idx: int, rnn_type: str) -> dict[str, Any]:
+        layer_dict: dict[str, Any] = {
+            "type": rnn_type,
+            "activation": "tanh",
+            "shape": [None, None, self.params.hidden_size],
+            "weights": [],
+        }
+
+        # Get weights for this layer
+        weight_ih = getattr(self.rnn, f"weight_ih_l{layer_idx}").data
+        weight_hh = getattr(self.rnn, f"weight_hh_l{layer_idx}").data
+        bias_ih = getattr(self.rnn, f"bias_ih_l{layer_idx}").data
+        bias_hh = getattr(self.rnn, f"bias_hh_l{layer_idx}").data
+
+        # For LSTM: PyTorch uses [4 * hidden_size, input_size] for weight_ih
+        # RTNeural expects split weights for each gate
+        hidden_size = self.params.hidden_size
+
+        if rnn_type == "lstm":
+            # LSTM gates: input, forget, cell, output
+            # PyTorch order: i, f, g, o
+            # RTNeural expects: W_ih, W_hh, b_ih, b_hh for each gate
+            weights = []
+            for gate_idx, gate_name in enumerate(["i", "f", "g", "o"]):
+                start = gate_idx * hidden_size
+                end = (gate_idx + 1) * hidden_size
+
+                W_ih = weight_ih[start:end, :].cpu().numpy().tolist()
+                W_hh = weight_hh[start:end, :].cpu().numpy().tolist()
+                b_ih = bias_ih[start:end].cpu().numpy().tolist()
+                b_hh = bias_hh[start:end].cpu().numpy().tolist()
+
+                weights.extend([W_ih, W_hh, b_ih, b_hh])
+
+            layer_dict["weights"] = weights
+        else:
+            # GRU gates: reset, update, new
+            # PyTorch order: r, z, n
+            weights = []
+            for gate_idx in range(3):
+                start = gate_idx * hidden_size
+                end = (gate_idx + 1) * hidden_size
+
+                W_ih = weight_ih[start:end, :].cpu().numpy().tolist()
+                W_hh = weight_hh[start:end, :].cpu().numpy().tolist()
+                b_ih = bias_ih[start:end].cpu().numpy().tolist()
+                b_hh = bias_hh[start:end].cpu().numpy().tolist()
+
+                weights.extend([W_ih, W_hh, b_ih, b_hh])
+
+            layer_dict["weights"] = weights
+
+        return layer_dict
+
+    def _export_rtneural_dense(self) -> dict[str, Any]:
+        layer_dict: dict[str, Any] = {
+            "type": "dense",
+            "activation": "",
+            "shape": [None, None, self.config.output_size],
+            "weights": [],
+        }
+
+        # Linear layer weights: [out_features, in_features]
+        # RTNeural expects: W^T, bias
+        weight = self.fc_out.weight.data
+        bias = (
+            self.fc_out.bias.data
+            if self.fc_out.bias is not None
+            else torch.zeros(self.config.output_size)
+        )
+
+        weight_rtneural = weight.cpu().numpy().tolist()
+        bias_rtneural = bias.cpu().numpy().tolist()
+
+        layer_dict["weights"] = [weight_rtneural, bias_rtneural]
+        return layer_dict
+
+    def _export_rtneural_convtranspose(self) -> dict[str, Any]:
+        """Export ConvTranspose1d as Conv1d for RTNeural compatibility.
+
+        RTNeural doesn't have a native ConvTranspose1d layer, so we export
+        it as a Conv1d layer with appropriate weight permutation.
+        """
+        layer_dict: dict[str, Any] = {
+            "type": "conv1d",
+            "activation": "",
+            "shape": [None, None, self.conv_transpose.out_channels],
+            "kernel_size": self.conv_transpose.kernel_size[0],
+            "dilation": 1,
+            "groups": 1,
+            "weights": [],
+        }
+
+        weight = self.conv_transpose.weight.data
+        weight_rtneural = weight.permute(2, 1, 0).cpu().numpy().tolist()
+        bias = (
+            self.conv_transpose.bias.data.cpu().numpy().tolist()
+            if self.conv_transpose.bias is not None
+            else [0.0] * self.conv_transpose.out_channels
+        )
+
+        layer_dict["weights"] = [weight_rtneural, bias]
+        return layer_dict
 
     @classmethod
-    def from_config(cls, config: Union[Dict[str, Any], ModelConfig]) -> "RecurrentNeuralFXModel":
+    def from_config(
+        cls, config: Union[Dict[str, Any], ModelConfig]
+    ) -> "RecurrentNeuralFXModel":
         if isinstance(config, dict):
             # Parse dict to ModelConfig
             model_type = config.get("type", "lstm")
@@ -196,7 +450,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                 params=params,
                 input_size=config.get("input_size", 1),
                 output_size=config.get("output_size", 1),
-                sample_rate=config.get("sample_rate", 48000)
+                sample_rate=config.get("sample_rate", 48000),
             )
             config = config_obj
 
@@ -215,7 +469,7 @@ class NeuralfxLSTM(RecurrentNeuralFXModel):
             hidden_size=self.params.hidden_size,
             num_layers=self.params.num_layers,
             batch_first=True,
-            dropout=self.params.dropout
+            dropout=self.params.dropout,
         )
 
     def reset_parameters(self):
@@ -234,7 +488,7 @@ class NeuralfxGRU(RecurrentNeuralFXModel):
             hidden_size=self.params.hidden_size,
             num_layers=self.params.num_layers,
             batch_first=True,
-            dropout=self.params.dropout
+            dropout=self.params.dropout,
         )
 
     def reset_parameters(self):

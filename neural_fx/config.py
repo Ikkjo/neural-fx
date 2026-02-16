@@ -18,6 +18,7 @@ class Conv1dConfig:
 @dataclass
 class LSTMParams:
     """Parameters for LSTM and GRU models."""
+
     hidden_size: int
     num_layers: int = 2
     conv1d: Conv1dConfig | None = None
@@ -26,10 +27,10 @@ class LSTMParams:
     conditioning_size: int = 0
 
 
-
 @dataclass
 class WaveNetParams:
     """Parameters for WaveNet models."""
+
     layers: int
     stacks: int = 3
     kernel_size: int = 3
@@ -54,6 +55,7 @@ class SSMParams:
     Implementations for specific architectures are expected to read only the
     subset of fields that they support; unused fields are safe to ignore.
     """
+
     d_state: int = 16
     d_conv: int = 4
     expand: int = 2
@@ -133,6 +135,7 @@ class DataConfig:
     train: DataPaths
     sample_rate: int = 48000
 
+
 # =============================================================================
 # ROOT CONFIG
 # =============================================================================
@@ -148,6 +151,7 @@ class NeuralFXConfig:
     lr_scheduler: LRSchedulerConfig
     loss: LossConfig
     data: DataConfig
+
 
 # =============================================================================
 # LOADER
@@ -207,18 +211,21 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             batch_size=d["training"].get("batch_size", 32),
             epochs=d["training"].get("epochs", 100),
             segment_length=d["training"].get("segment_length", 8192),
-            tbptt=TBPTTConfig(**d["training"]["tbptt"]
-                              ) if "tbptt" in d["training"] else None,
+            tbptt=TBPTTConfig(**d["training"]["tbptt"])
+            if "tbptt" in d["training"]
+            else None,
             seed=d["training"].get("seed", 42),
         ),
         optimizer=OptimizerConfig(**optimizer_cfg),
         lr_scheduler=LRSchedulerConfig(**lr_scheduler_cfg),
         loss=LossConfig(
             type=d["loss"]["type"],
-            weights=LossWeights(**d["loss"]["weights"]
-                                ) if "weights" in d["loss"] else None,
-            pre_emphasis=PreEmphasisConfig(
-                **d["loss"]["pre_emphasis"]) if "pre_emphasis" in d["loss"] else None,
+            weights=LossWeights(**d["loss"]["weights"])
+            if "weights" in d["loss"]
+            else None,
+            pre_emphasis=PreEmphasisConfig(**d["loss"]["pre_emphasis"])
+            if "pre_emphasis" in d["loss"]
+            else None,
             mask_first=d["loss"].get("mask_first", 4096),
         ),
         data=DataConfig(
