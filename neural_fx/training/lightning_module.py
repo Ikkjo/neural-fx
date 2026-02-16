@@ -93,7 +93,7 @@ class NeuralFXModule(L.LightningModule):
                 loss = loss + stft_weight * stft_loss_fn(pred, target)
 
             # Default to MSE if no weights specified
-            if loss.item() == 0.0:
+            if loss.item() < 1e-8:
                 loss = MSE(pred, target)
 
             return loss

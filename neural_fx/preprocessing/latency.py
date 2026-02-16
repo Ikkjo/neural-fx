@@ -88,16 +88,16 @@ class LatencyCalibrator:
         of O(n^2) for time-domain correlation.
         """
         # Move to CPU and convert to numpy for processing
-        x = input_audio.cpu().numpy()
-        y = output_audio.cpu().numpy()
+        x_orig = input_audio.cpu().numpy()
+        y_orig = output_audio.cpu().numpy()
 
         # Ensure float64 for better precision in correlation
-        x = x.astype(np.float64)
-        y = y.astype(np.float64)
+        x_orig = x_orig.astype(np.float64)
+        y_orig = y_orig.astype(np.float64)
 
-        # Normalize for better correlation results
-        x = (x - np.mean(x)) / (np.std(x) + 1e-10)
-        y = (y - np.mean(y)) / (np.std(y) + 1e-10)
+        # Normalize for better correlation results (used for delay finding only)
+        x = (x_orig - np.mean(x_orig)) / (np.std(x_orig) + 1e-10)
+        y = (y_orig - np.mean(y_orig)) / (np.std(y_orig) + 1e-10)
 
         # Compute cross-correlation using FFT
         # FFT cross-correlation: IFFT(FFT(x) * conj(FFT(y)))
@@ -121,19 +121,37 @@ class LatencyCalibrator:
 
         search_corr = corr[search_start:search_end]
         peak_idx = np.argmax(np.abs(search_corr))
-        peak_value = search_corr[peak_idx]
 
         # Convert back to delay in samples
         # Positive delay means output lags input (output needs to be shifted back)
         # Negative delay means output leads input
         delay = (center - search_start) - peak_idx
 
-        # Normalize correlation score
-        # Theoretical max is the overlap length at the optimal shift
-        overlap_len = len(x) - abs(delay)
+        # Compute correlation score on original (non-normalized) aligned signals
+        # This preserves amplitude information for a proper correlation score
+        overlap_len = len(x_orig) - abs(delay)
         if overlap_len > 0:
-            correlation_score = abs(peak_value) / overlap_len
-            correlation_score = min(correlation_score, 1.0)  # Cap at 1.0
+            if delay > 0:
+                # Output lags input: align by removing delay from output start
+                x_aligned = x_orig[:overlap_len]
+                y_aligned = y_orig[delay:delay + overlap_len]
+            elif delay < 0:
+                # Output leads input: align by removing |delay| from input start
+                x_aligned = x_orig[-delay:-delay + overlap_len]
+                y_aligned = y_orig[:overlap_len]
+            else:
+                x_aligned = x_orig[:overlap_len]
+                y_aligned = y_orig[:overlap_len]
+
+            # Compute correlation on original aligned signals
+            x_std = np.std(x_aligned)
+            y_std = np.std(y_aligned)
+
+            if x_std > 0 and y_std > 0:
+                correlation_score = np.corrcoef(x_aligned, y_aligned)[0, 1]
+                correlation_score = abs(correlation_score)  # Use absolute correlation
+            else:
+                correlation_score = 0.0
         else:
             correlation_score = 0.0
 

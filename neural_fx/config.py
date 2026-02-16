@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Union
 import yaml
@@ -132,19 +132,11 @@ class STFTLossConfig:
     """Configuration for multi-resolution STFT loss."""
 
     enabled: bool = False
-    fft_sizes: list[int] | None = None
+    fft_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048])
     hop_sizes: list[int] | None = None
     win_sizes: list[int] | None = None
     sc_weight: float = 1.0  # Spectral convergence weight
     mag_weight: float = 1.0  # Log magnitude weight
-
-    def __post_init__(self):
-        if self.fft_sizes is None:
-            self.fft_sizes = [512, 1024, 2048]
-        if self.hop_sizes is None:
-            self.hop_sizes = [fft // 4 for fft in self.fft_sizes]
-        if self.win_sizes is None:
-            self.win_sizes = self.fft_sizes
 
 
 @dataclass
@@ -256,14 +248,15 @@ def _load_stft_loss_config(stft_cfg: dict | None) -> STFTLossConfig | None:
     if stft_cfg is None:
         return None
 
-    # Extract list fields
-    fft_sizes = stft_cfg.pop("fft_sizes", None)
-    hop_sizes = stft_cfg.pop("hop_sizes", None)
-    win_sizes = stft_cfg.pop("win_sizes", None)
+    # Create config with defaults
+    config = STFTLossConfig(**stft_cfg)
 
-    config = STFTLossConfig(
-        fft_sizes=fft_sizes, hop_sizes=hop_sizes, win_sizes=win_sizes, **stft_cfg
-    )
+    # Apply default hop_sizes and win_sizes if not provided
+    if config.hop_sizes is None:
+        config.hop_sizes = [fft // 4 for fft in config.fft_sizes]
+    if config.win_sizes is None:
+        config.win_sizes = config.fft_sizes
+
     return config
 
 

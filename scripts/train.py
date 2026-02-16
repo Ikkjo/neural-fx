@@ -186,7 +186,7 @@ def main():
 
     # Enhanced checkpoint callback
     latency_cal_dict = None
-    if latency_calibration:
+    if latency_calibration is not None:
         latency_cal_dict = {
             "delay_samples": latency_calibration.delay_samples,
             "method": latency_calibration.method,
