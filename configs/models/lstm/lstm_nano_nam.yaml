@@ -1,5 +1,5 @@
 version: "1.0"
-name: "lstm_nano"
+name: "lstm_nano_nam"
 
 model:
   type: "lstm"
@@ -43,18 +43,25 @@ loss:
     coef: 0.85
   mask_first: 4096
 
-data:
-  train:
-    input: "data/DI.wav"
-    target: "data/pearl_clean_sm57.wav"
-  sample_rate: 48000
-
+# NAM-specific configuration
 latency:
   enabled: true
-  method: "xcorr"
-  max_delay: 1000
+  method: "blip"  # Use blip detection for NAM inputs
+  manual_delay: null
+  max_delay: 10000
 
 validation:
   enabled: true
   check_clipping: true
   check_dc_offset: true
+  check_replicability: true
+  ignore_warnings: false
+
+data:
+  train:
+    input: "data/nam_input_v3.wav"  # NAM v3 standard input
+    target: "data/nam_output.wav"
+  val:
+    input: "data/nam_input_v3.wav"
+    target: "data/nam_output.wav"
+  sample_rate: 48000

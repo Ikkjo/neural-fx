@@ -3,7 +3,6 @@ neural_fx_dataset/*
 neural_fx_dataset_float/*
 __pycache__/
 *.pyc
-*/lightning_logs/*
 neural_fx.egg-info/*
 GEMINI.md
 AGENTS.md
@@ -11,3 +10,19 @@ TODO.md
 .opencode
 .ipynb_checkpoints
 .ruff_cache
+data
+venv
+
+# Training artifacts
+lightning_logs/
+notebooks/lightning_logs/
+*.ckpt
+*.pth
+*.pt
+*.pth.tar
+events.out.tfevents.*
+
+# Saved models directory (keep structure, ignore contents)
+saved_models/*
+!saved_models/.gitkeep
+!saved_models/README.md
