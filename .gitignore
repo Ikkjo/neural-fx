@@ -11,6 +11,7 @@ TODO.md
 .ipynb_checkpoints
 .ruff_cache
 data
+venv
 
 # Training artifacts
 lightning_logs/
