@@ -49,7 +49,7 @@ class ValidationReport:
 
         lines.append("Checks:")
         for name, result in self.checks.items():
-            status = "✓" if result.passed else "✗"
+            status = "[OK]" if result.passed else "[FAIL]"
             value_str = f" ({result.value:.4f})" if result.value is not None else ""
             lines.append(f"  {status} {name}: {result.message}{value_str}")
 

@@ -186,6 +186,7 @@ class ValidationConfig:
     enabled: bool = True
     check_clipping: bool = True
     check_dc_offset: bool = True
+    check_replicability: bool | None = None
     ignore_warnings: bool = False
 
 
