@@ -69,6 +69,7 @@ class DataValidator:
         self,
         check_clipping: bool = True,
         check_dc_offset: bool = True,
+        check_replicability: bool = True,
         clipping_threshold: float = 0.99,
         dc_offset_threshold: float = 0.01,
         esr_threshold: float = 0.1,
@@ -87,6 +88,7 @@ class DataValidator:
         self.clipping_threshold = clipping_threshold
         self.dc_offset_threshold = dc_offset_threshold
         self.esr_threshold = esr_threshold
+        self.check_replicability = check_replicability
 
     def validate(
         self, input_path: str | Path, output_path: str | Path
@@ -160,12 +162,13 @@ class DataValidator:
                 warnings.append("Output audio has DC offset")
 
         # Check 9: Replicability check (ESR between random segments)
-        checks["replicability"] = self._check_replicability(input_audio, output_audio)
-        if not checks["replicability"].passed:
-            warnings.append(
-                f"Low replicability (ESR={checks['replicability'].value:.4f}) - "
-                "input/output may not be from same performance"
-            )
+        if self.check_replicability:
+            checks["replicability"] = self._check_replicability(input_audio, output_audio)
+            if not checks["replicability"].passed:
+                warnings.append(
+                    f"Low replicability (ESR={checks['replicability'].value:.4f}) - "
+                    "input/output may not be from same performance"
+                )
 
         # Check 10: Signal level check
         checks["signal_level"] = self._check_signal_level(input_audio, output_audio)
@@ -419,15 +422,12 @@ class DataValidator:
 def create_data_validator(
     check_clipping: bool = True,
     check_dc_offset: bool = True,
-    ignore_warnings: bool = False,
 ) -> DataValidator:
     """Factory function to create a DataValidator instance.
 
     Args:
         check_clipping: Whether to check for clipping.
         check_dc_offset: Whether to check for DC offset.
-        ignore_warnings: If True, warnings won't cause overall validation to fail.
-
     Returns:
         DataValidator instance.
     """

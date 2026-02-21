@@ -9,6 +9,7 @@ __all__ = [
     "MODEL_REGISTRY",
     "create_model_from_config",
     "register_model",
+    "get_available_models",
 ]
 
 
