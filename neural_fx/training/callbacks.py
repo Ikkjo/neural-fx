@@ -154,7 +154,11 @@ class NeuralFXCheckpoint(ModelCheckpoint):
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        except (
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            subprocess.SubprocessError,
+        ):
             pass
         return None
 
@@ -228,7 +232,9 @@ class ESRThresholdStopping(Callback):
         self.threshold = threshold
         self.monitor = monitor
 
-    def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
+    def on_validation_epoch_end(
+        self, trainer: L.Trainer, pl_module: L.LightningModule
+    ) -> None:
         """Check if ESR threshold is reached."""
         if self.monitor not in trainer.callback_metrics:
             return

@@ -77,6 +77,11 @@ class AudioDataset(Dataset):
             self.target_audio = self.target_audio[..., :min_len]
 
         self.num_segments = self.input_audio.shape[-1] // segment_length
+        if self.num_segments == 0:
+            warnings.warn(
+                f"Audio length ({self.input_audio.shape[-1]}) is shorter than "
+                f"segment_length ({segment_length}). Creating empty dataset."
+            )
         self.total_length = self.num_segments * segment_length
 
     def _load_audio(self, path: Path) -> Tensor:
@@ -175,12 +180,10 @@ class AudioDataset(Dataset):
         target_audio = target_audio[..., :min_len]
 
         if normalize:
-            input_max = input_audio.abs().max()
-            target_max = target_audio.abs().max()
-            if input_max > 0:
-                input_audio = input_audio / input_max
-            if target_max > 0:
-                target_audio = target_audio / target_max
+            combined_max = max(input_audio.abs().max(), target_audio.abs().max())
+            if combined_max > 0:
+                input_audio = input_audio / combined_max
+                target_audio = target_audio / combined_max
 
         # Calculate split point
         num_segments = min_len // segment_length
@@ -207,6 +210,9 @@ class AudioDataset(Dataset):
         train_dataset.normalize = normalize
         train_dataset.random_segments = random_segments
         train_dataset.transform = transform
+        # TODO: Could preserve parent's latency_calibration instead of always setting None,
+        # or accept latency_calibration as an explicit parameter to split() method
+        train_dataset.latency_calibration = None
         train_dataset.input_audio = train_input
         train_dataset.target_audio = train_target
         train_dataset.num_segments = train_segments
@@ -218,6 +224,8 @@ class AudioDataset(Dataset):
         val_dataset.normalize = normalize
         val_dataset.random_segments = False  # Always sequential for validation
         val_dataset.transform = None  # No augmentation for validation
+        # TODO: Could preserve parent's latency_calibration instead of always setting None
+        val_dataset.latency_calibration = None
         val_dataset.input_audio = val_input
         val_dataset.target_audio = val_target
         val_dataset.num_segments = val_segments

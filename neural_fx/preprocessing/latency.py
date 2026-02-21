@@ -134,10 +134,10 @@ class LatencyCalibrator:
             if delay > 0:
                 # Output lags input: align by removing delay from output start
                 x_aligned = x_orig[:overlap_len]
-                y_aligned = y_orig[delay:delay + overlap_len]
+                y_aligned = y_orig[delay : delay + overlap_len]
             elif delay < 0:
                 # Output leads input: align by removing |delay| from input start
-                x_aligned = x_orig[-delay:-delay + overlap_len]
+                x_aligned = x_orig[-delay : -delay + overlap_len]
                 y_aligned = y_orig[:overlap_len]
             else:
                 x_aligned = x_orig[:overlap_len]
@@ -173,9 +173,7 @@ class LatencyCalibrator:
         # Blip detection requires specific input signals
         return self._calibrate_xcorr(input_audio, output_audio, max_delay)
 
-    def apply_delay(
-        self, x: Tensor, y: Tensor, delay: int
-    ) -> Tuple[Tensor, Tensor]:
+    def apply_delay(self, x: Tensor, y: Tensor, delay: int) -> Tuple[Tensor, Tensor]:
         """Apply delay compensation to align input and output.
 
         Args:

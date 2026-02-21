@@ -26,7 +26,6 @@ def run_latency_calibration(config, input_path: str, target_path: str):
     print(f"Running latency calibration using {config.latency.method} method...")
 
     # Load audio for calibration
-    from neural_fx.data.dataset import AudioDataset
     dataset = AudioDataset(
         input_path=input_path,
         target_path=target_path,
@@ -75,7 +74,9 @@ def run_data_validation(config, input_path: str, target_path: str, ignore_checks
         return False
 
     if report.warnings and not ignore_checks and not config.validation.ignore_warnings:
-        print("\nWarnings detected. Use --ignore_checks to bypass or set ignore_warnings in config.")
+        print(
+            "\nWarnings detected. Use --ignore_checks to bypass or set ignore_warnings in config."
+        )
         # Don't fail on warnings alone unless explicitly requested
 
     return True
@@ -248,14 +249,17 @@ def main():
         trainer_kwargs["limit_val_batches"] = 0
 
     # Setup resume from checkpoint if specified
-    if args.resume:
-        trainer_kwargs["resume_from_checkpoint"] = args.resume
-        print(f"Resuming from checkpoint: {args.resume}")
+    resume_path = args.resume
+    if resume_path:
+        print(f"Resuming from checkpoint: {resume_path}")
 
     trainer = L.Trainer(**trainer_kwargs)
 
     # Train
-    trainer.fit(module)
+    if resume_path:
+        trainer.fit(module, ckpt_path=resume_path)
+    else:
+        trainer.fit(module)
 
     print(f"Training complete. Best checkpoint: {checkpoint_callback.best_model_path}")
 

@@ -241,7 +241,7 @@ class NeuralFXModule(L.LightningModule):
             dataset,
             batch_size=self.config.training.batch_size,
             shuffle=True,
-            num_workers=0,
+            num_workers=self.config.training.num_workers,
             pin_memory=True,
         )
 
@@ -253,6 +253,6 @@ class NeuralFXModule(L.LightningModule):
             dataset,
             batch_size=self.config.training.batch_size,
             shuffle=False,
-            num_workers=0,
+            num_workers=self.config.training.num_workers,
             pin_memory=True,
         )

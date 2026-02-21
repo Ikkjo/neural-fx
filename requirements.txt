@@ -7,3 +7,4 @@ matplotlib
 lightning
 pyyaml
 pytest
+ruff

@@ -10,7 +10,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import torch
 import torchaudio
 import pytest
-import numpy as np
 
 from neural_fx.analysis.plotting import TrainingAnalyzer, create_analyzer
 from neural_fx.config import ModelConfig, LSTMParams
@@ -122,7 +121,9 @@ class TestTrainingAnalyzer:
             output_dir = Path(tmpdir)
 
             analyzer = TrainingAnalyzer(temp_model)
-            report = analyzer.generate_report(temp_dataset, output_dir, num_samples=4800)
+            report = analyzer.generate_report(
+                temp_dataset, output_dir, num_samples=4800
+            )
 
             assert "esr" in report
             assert "esr_comment" in report
@@ -139,7 +140,9 @@ class TestTrainingAnalyzer:
         """Test that ESR value is reasonable in report."""
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = TrainingAnalyzer(temp_model)
-            report = analyzer.generate_report(temp_dataset, Path(tmpdir), num_samples=4800)
+            report = analyzer.generate_report(
+                temp_dataset, Path(tmpdir), num_samples=4800
+            )
 
             # ESR should be non-negative
             assert report["esr"] >= 0

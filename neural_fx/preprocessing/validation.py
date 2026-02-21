@@ -122,7 +122,9 @@ class DataValidator:
         checks["can_load"] = load_result
         if not checks["can_load"].passed:
             return ValidationReport(
-                passed=False, checks=checks, warnings=["Cannot proceed without audio data"]
+                passed=False,
+                checks=checks,
+                warnings=["Cannot proceed without audio data"],
             )
 
         # Check 3: Sample rates match
@@ -147,13 +149,17 @@ class DataValidator:
         if self.check_clipping:
             checks["output_clipping"] = self._check_clipping(output_audio, "output")
             if not checks["output_clipping"].passed:
-                warnings.append("Output audio has clipping - may affect training quality")
+                warnings.append(
+                    "Output audio has clipping - may affect training quality"
+                )
 
         # Check 7: DC offset detection (input)
         if self.check_dc_offset:
             checks["input_dc_offset"] = self._check_dc_offset(input_audio, "input")
             if not checks["input_dc_offset"].passed:
-                warnings.append("Input audio has DC offset - consider high-pass filtering")
+                warnings.append(
+                    "Input audio has DC offset - consider high-pass filtering"
+                )
 
         # Check 8: DC offset detection (output)
         if self.check_dc_offset:
@@ -163,7 +169,9 @@ class DataValidator:
 
         # Check 9: Replicability check (ESR between random segments)
         if self.check_replicability:
-            checks["replicability"] = self._check_replicability(input_audio, output_audio)
+            checks["replicability"] = self._check_replicability(
+                input_audio, output_audio
+            )
             if not checks["replicability"].passed:
                 warnings.append(
                     f"Low replicability (ESR={checks['replicability'].value:.4f}) - "
@@ -191,9 +199,7 @@ class DataValidator:
             warnings=warnings,
         )
 
-    def _check_files_exist(
-        self, input_path: Path, output_path: Path
-    ) -> CheckResult:
+    def _check_files_exist(self, input_path: Path, output_path: Path) -> CheckResult:
         """Check that both files exist."""
         if not input_path.exists():
             return CheckResult(
@@ -215,16 +221,20 @@ class DataValidator:
         try:
             input_audio, _ = torchaudio.load(str(input_path))
         except Exception as e:
-            return CheckResult(
-                passed=False, message=f"Failed to load input: {e}"
-            ), None, None
+            return (
+                CheckResult(passed=False, message=f"Failed to load input: {e}"),
+                None,
+                None,
+            )
 
         try:
             output_audio, _ = torchaudio.load(str(output_path))
         except Exception as e:
-            return CheckResult(
-                passed=False, message=f"Failed to load output: {e}"
-            ), None, None
+            return (
+                CheckResult(passed=False, message=f"Failed to load output: {e}"),
+                None,
+                None,
+            )
 
         return (
             CheckResult(
@@ -235,9 +245,7 @@ class DataValidator:
             output_audio,
         )
 
-    def _check_sample_rates(
-        self, input_path: Path, output_path: Path
-    ) -> CheckResult:
+    def _check_sample_rates(self, input_path: Path, output_path: Path) -> CheckResult:
         """Check that sample rates match."""
         try:
             _, input_sr = torchaudio.load(str(input_path))
@@ -250,7 +258,9 @@ class DataValidator:
                     value=float(abs(input_sr - output_sr)),
                 )
             return CheckResult(
-                passed=True, message=f"Sample rates match: {input_sr} Hz", value=float(input_sr)
+                passed=True,
+                message=f"Sample rates match: {input_sr} Hz",
+                value=float(input_sr),
             )
         except Exception as e:
             return CheckResult(
@@ -337,7 +347,9 @@ class DataValidator:
 
         if segment_length < 1024:
             return CheckResult(
-                passed=False, message="Audio too short for replicability check", value=1.0
+                passed=False,
+                message="Audio too short for replicability check",
+                value=1.0,
             )
 
         # Extract segments from different parts of the audio

@@ -3,14 +3,10 @@
 import sys
 import os
 import tempfile
-import json
-from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import torch
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 from neural_fx.training.callbacks import (
     NeuralFXCheckpoint,

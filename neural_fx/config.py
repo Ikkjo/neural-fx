@@ -107,6 +107,7 @@ class TrainingConfig:
     tbptt: TBPTTConfig | None = None
     seed: int = 42
     augmentation: AugmentationConfig | None = None
+    num_workers: int = 4
 
 
 @dataclass
@@ -320,10 +321,11 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             segment_length=training_cfg.get("segment_length", 8192),
             random_segments=training_cfg.get("random_segments", False),
             tbptt=TBPTTConfig(**training_cfg["tbptt"])
-            if "tbptt" in training_cfg
+            if training_cfg.get("tbptt")
             else None,
             seed=training_cfg.get("seed", 42),
             augmentation=augmentation,
+            num_workers=training_cfg.get("num_workers", 4),
         ),
         optimizer=OptimizerConfig(**optimizer_cfg),
         lr_scheduler=LRSchedulerConfig(**lr_scheduler_cfg),

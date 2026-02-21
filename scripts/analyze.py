@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import torch
@@ -53,7 +54,9 @@ def load_checkpoint(checkpoint_path: str):
         raise ValueError("No config found in checkpoint")
 
     # Try to find and load original config file
-    config_path = Path("configs/models") / config_dict.get("name", "model") / "config.yaml"
+    config_path = (
+        Path("configs/models") / config_dict.get("name", "model") / "config.yaml"
+    )
     if config_path.exists():
         config = load_config(config_path)
     else:
@@ -95,6 +98,13 @@ def load_checkpoint(checkpoint_path: str):
             if k.startswith("model.")
         }
         model.load_state_dict(model_state)
+    else:
+        warnings.warn(
+            "No 'state_dict' found in checkpoint. Using randomly initialized weights."
+        )
+
+    # Set model to evaluation mode
+    model.eval()
 
     return model, config
 
@@ -272,23 +282,23 @@ def generate_html_report(report: dict, output_path: Path):
     <h2>Metrics</h2>
     <div class="metric">
         <div class="metric-label">Error-to-Signal Ratio (ESR)</div>
-        <div class="metric-value">{report['esr']:.6f}</div>
-        <div class="{get_esr_class(report['esr'])}">{report['esr_comment']}</div>
+        <div class="metric-value">{report["esr"]:.6f}</div>
+        <div class="{get_esr_class(report["esr"])}">{report["esr_comment"]}</div>
     </div>
 
     <div class="metric">
         <div class="metric-label">Mean Squared Error (MSE)</div>
-        <div class="metric-value">{report['mse']:.6f}</div>
+        <div class="metric-value">{report["mse"]:.6f}</div>
     </div>
 
     <div class="metric">
         <div class="metric-label">Correlation Coefficient</div>
-        <div class="metric-value">{report['correlation']:.4f}</div>
+        <div class="metric-value">{report["correlation"]:.4f}</div>
     </div>
 
     <div class="metric">
         <div class="metric-label">Model Parameters</div>
-        <div class="metric-value">{report['num_params']:,}</div>
+        <div class="metric-value">{report["num_params"]:,}</div>
     </div>
 
     <h2>Visualizations</h2>

@@ -10,7 +10,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import torch
 import torchaudio
 import pytest
-import numpy as np
 
 from neural_fx.preprocessing.latency import (
     LatencyCalibrator,

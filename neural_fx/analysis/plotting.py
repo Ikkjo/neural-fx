@@ -60,8 +60,16 @@ class TrainingAnalyzer:
 
         # Convert to numpy
         x_np = x.cpu().numpy() if isinstance(x, torch.Tensor) else np.array(x)
-        y_true_np = y_true.cpu().numpy() if isinstance(y_true, torch.Tensor) else np.array(y_true)
-        y_pred_np = y_pred.cpu().numpy() if isinstance(y_pred, torch.Tensor) else np.array(y_pred)
+        y_true_np = (
+            y_true.cpu().numpy()
+            if isinstance(y_true, torch.Tensor)
+            else np.array(y_true)
+        )
+        y_pred_np = (
+            y_pred.cpu().numpy()
+            if isinstance(y_pred, torch.Tensor)
+            else np.array(y_pred)
+        )
 
         # Calculate error
         error = y_true_np - y_pred_np
@@ -85,7 +93,9 @@ class TrainingAnalyzer:
 
         # Plot error
         axes[2].plot(error, linewidth=0.5, color="red", alpha=0.8)
-        axes[2].set_title(f"Error (Target - Prediction) | ESR: {self.calculate_esr(y_pred, y_true):.4f}")
+        axes[2].set_title(
+            f"Error (Target - Prediction) | ESR: {self.calculate_esr(y_pred, y_true):.4f}"
+        )
         axes[2].set_ylabel("Amplitude")
         axes[2].set_xlabel("Sample")
         axes[2].grid(True, alpha=0.3)
@@ -116,8 +126,14 @@ class TrainingAnalyzer:
             Matplotlib figure.
         """
         # Convert to numpy
-        pred_np = pred.cpu().numpy() if isinstance(pred, torch.Tensor) else np.array(pred)
-        target_np = target.cpu().numpy() if isinstance(target, torch.Tensor) else np.array(target)
+        pred_np = (
+            pred.cpu().numpy() if isinstance(pred, torch.Tensor) else np.array(pred)
+        )
+        target_np = (
+            target.cpu().numpy()
+            if isinstance(target, torch.Tensor)
+            else np.array(target)
+        )
 
         # Ensure 1D arrays
         pred_np = pred_np.squeeze()
@@ -126,12 +142,16 @@ class TrainingAnalyzer:
         fig, axes = plt.subplots(2, 1, figsize=(12, 8))
 
         # Target spectrogram
-        axes[0].specgram(target_np, Fs=sample_rate, NFFT=2048, noverlap=1024, cmap="viridis")
+        axes[0].specgram(
+            target_np, Fs=sample_rate, NFFT=2048, noverlap=1024, cmap="viridis"
+        )
         axes[0].set_title("Target Spectrogram")
         axes[0].set_ylabel("Frequency (Hz)")
 
         # Prediction spectrogram
-        axes[1].specgram(pred_np, Fs=sample_rate, NFFT=2048, noverlap=1024, cmap="viridis")
+        axes[1].specgram(
+            pred_np, Fs=sample_rate, NFFT=2048, noverlap=1024, cmap="viridis"
+        )
         axes[1].set_title("Prediction Spectrogram")
         axes[1].set_ylabel("Frequency (Hz)")
         axes[1].set_xlabel("Time (s)")
@@ -295,7 +315,9 @@ class TrainingAnalyzer:
         correlation = np.corrcoef(pred_np, true_np)[0, 1]
 
         # Generate plots
-        self.plot_comparison(dataset, num_samples, output_dir / "waveform_comparison.png")
+        self.plot_comparison(
+            dataset, num_samples, output_dir / "waveform_comparison.png"
+        )
         self.plot_spectrograms(y_pred, y_true, output_dir / "spectrograms.png")
 
         report = {

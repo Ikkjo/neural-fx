@@ -217,6 +217,21 @@ pytest --cov=neural_fx
 
 See [TESTING.md](TESTING.md) for detailed testing guidelines.
 
+## Linting
+
+This project uses [ruff](https://docs.astral.sh/ruff/) for linting and code style enforcement.
+
+```bash
+# Run ruff linter
+ruff check .
+
+# Run ruff formatter
+ruff format .
+
+# Fix auto-fixable issues
+ruff check --fix .
+```
+
 ## Usage Examples
 
 ### Loading and Using a Model
