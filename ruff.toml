@@ -1,0 +1,5 @@
+[lint]
+exclude = ["notebooks/**", "venv/**", "__pycache__", "*.egg-info"]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
