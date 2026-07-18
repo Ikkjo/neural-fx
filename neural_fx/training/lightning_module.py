@@ -216,7 +216,7 @@ class NeuralFXModule(L.LightningModule):
             input_path=self.config.data.train.input,
             target_path=self.config.data.train.target,
             segment_length=self.config.training.segment_length,
-            sample_rate=self.config.data.sample_rate,
+            sample_rate=self.config.sample_rate,
             random_segments=self.config.training.random_segments,
             transform=self.transform,
         )
@@ -230,7 +230,7 @@ class NeuralFXModule(L.LightningModule):
             input_path=self.config.data.val.input,
             target_path=self.config.data.val.target,
             segment_length=self.config.training.segment_length,
-            sample_rate=self.config.data.sample_rate,
+            sample_rate=self.config.sample_rate,
             random_segments=False,  # Sequential for validation
             transform=None,  # No augmentation for validation
         )

@@ -24,6 +24,20 @@ class TrainingAnalyzer:
         self.config = config
         self.model.eval()
 
+    def _resolve_sample_rate(self, sample_rate: int | None = None) -> int:
+        """Resolve plotting rate from the authoritative model configuration."""
+        configured_rate = int(
+            self.config.sample_rate
+            if self.config is not None
+            else self.model.sample_rate
+        )
+        if sample_rate is not None and int(sample_rate) != configured_rate:
+            raise ValueError(
+                f"Requested sample rate {sample_rate} does not match the configured "
+                f"sample rate {configured_rate}."
+            )
+        return configured_rate
+
     def plot_comparison(
         self,
         dataset,
@@ -112,7 +126,7 @@ class TrainingAnalyzer:
         pred: Tensor,
         target: Tensor,
         save_path: str | Path | None = None,
-        sample_rate: int = 48000,
+        sample_rate: int | None = None,
     ) -> plt.Figure:
         """Plot spectrograms of prediction and target.
 
@@ -125,6 +139,8 @@ class TrainingAnalyzer:
         Returns:
             Matplotlib figure.
         """
+        sample_rate = self._resolve_sample_rate(sample_rate)
+
         # Convert to numpy
         pred_np = (
             pred.cpu().numpy() if isinstance(pred, torch.Tensor) else np.array(pred)

@@ -1,6 +1,8 @@
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Union
+
 import yaml
 
 # =============================================================================
@@ -166,7 +168,6 @@ class DataPaths:
 class DataConfig:
     train: DataPaths
     val: DataPaths | None = None  # Optional validation data paths
-    sample_rate: int = 48000
 
 
 @dataclass
@@ -177,6 +178,7 @@ class LatencyConfig:
     method: str = "xcorr"  # xcorr, manual
     manual_delay: int | None = None
     max_delay: int = 10000
+    calibration_duration_seconds: float = 5.0
 
 
 @dataclass
@@ -207,6 +209,11 @@ class NeuralFXConfig:
     data: DataConfig
     latency: LatencyConfig | None = None
     validation: ValidationConfig | None = None
+
+    @property
+    def sample_rate(self) -> int:
+        """Authoritative sample rate for models, data, and audio processing."""
+        return self.model.sample_rate
 
 
 # =============================================================================
@@ -292,6 +299,32 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     train_data_cfg = data_cfg["train"]
     val_data_cfg = data_cfg.get("val")
 
+    model_sample_rate = model_cfg.get("sample_rate")
+    legacy_data_sample_rate = data_cfg.get("sample_rate")
+    if (
+        model_sample_rate is not None
+        and legacy_data_sample_rate is not None
+        and model_sample_rate != legacy_data_sample_rate
+    ):
+        raise ValueError(
+            "Conflicting sample rates: model.sample_rate "
+            f"({model_sample_rate}) does not match deprecated data.sample_rate "
+            f"({legacy_data_sample_rate}). Remove data.sample_rate and keep the "
+            "authoritative value under model.sample_rate."
+        )
+    if legacy_data_sample_rate is not None:
+        warnings.warn(
+            "data.sample_rate is deprecated; move the value to model.sample_rate.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    if model_sample_rate is None:
+        model_sample_rate = (
+            legacy_data_sample_rate
+            if legacy_data_sample_rate is not None
+            else 48000
+        )
+
     # Load augmentation config
     training_cfg = d["training"]
     aug_cfg = training_cfg.get("augmentation")
@@ -314,7 +347,7 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             params=_load_model_params(model_type, model_params),
             input_size=model_cfg.get("input_size", 1),
             output_size=model_cfg.get("output_size", 1),
-            sample_rate=model_cfg.get("sample_rate", 48000),
+            sample_rate=model_sample_rate,
         ),
         training=TrainingConfig(
             batch_size=training_cfg.get("batch_size", 32),
@@ -344,7 +377,6 @@ def load_config(path: Path | str) -> NeuralFXConfig:
         data=DataConfig(
             train=DataPaths(**train_data_cfg),
             val=DataPaths(**val_data_cfg) if val_data_cfg else None,
-            sample_rate=data_cfg.get("sample_rate", 48000),
         ),
         latency=latency_cfg,
         validation=validation_cfg,

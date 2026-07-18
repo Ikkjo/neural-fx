@@ -175,7 +175,7 @@ def main():
         input_path=input_file,
         target_path=target_file,
         segment_length=config.training.segment_length,
-        sample_rate=config.data.sample_rate,
+        sample_rate=config.sample_rate,
         random_segments=False,
     )
 

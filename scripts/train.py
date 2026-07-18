@@ -29,8 +29,10 @@ def run_latency_calibration(config, input_path: str, target_path: str):
     dataset = AudioDataset(
         input_path=input_path,
         target_path=target_path,
-        segment_length=48000 * 5,  # Use 5 seconds for calibration
-        sample_rate=config.data.sample_rate,
+        segment_length=round(
+            config.sample_rate * config.latency.calibration_duration_seconds
+        ),
+        sample_rate=config.sample_rate,
         normalize=True,
     )
 
@@ -294,7 +296,7 @@ def main():
                 input_path=input_path,
                 target_path=target_path,
                 segment_length=config.training.segment_length,
-                sample_rate=config.data.sample_rate,
+                sample_rate=config.sample_rate,
                 latency_calibration=latency_calibration,
                 random_segments=False,
             )

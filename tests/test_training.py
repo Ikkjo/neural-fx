@@ -259,7 +259,6 @@ class TestCheckpointResume:
             loss=LossConfig(type="mse"),
             data=DataConfig(
                 train=DataPaths(input="data/DI.wav", target="data/effect.wav"),
-                sample_rate=48000,
             ),
         )
 
@@ -420,7 +419,6 @@ class TestUpdatedLossWeights:
             loss=LossConfig(type="mse"),
             data=DataConfig(
                 train=DataPaths(input="data/DI.wav", target="data/effect.wav"),
-                sample_rate=48000,
             ),
         )
 

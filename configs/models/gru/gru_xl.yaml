@@ -47,4 +47,3 @@ data:
   train:
     input: "data/DI.wav"
     target: "data/effect.wav"
-  sample_rate: 48000

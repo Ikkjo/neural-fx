@@ -47,7 +47,6 @@ data:
   train:
     input: "data/DI.wav"
     target: "data/pearl_clean_sm57.wav"
-  sample_rate: 48000
 
 latency:
   enabled: true

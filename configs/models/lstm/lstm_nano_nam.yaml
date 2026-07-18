@@ -64,4 +64,3 @@ data:
   val:
     input: "data/nam_input_v3.wav"
     target: "data/nam_output.wav"
-  sample_rate: 48000

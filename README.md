@@ -102,6 +102,7 @@ latency:
   method: "blip"  # Use blip detection for NAM inputs
   manual_delay: null
   max_delay: 10000
+  calibration_duration_seconds: 5.0
 
 data:
   train:
@@ -166,8 +167,10 @@ data:
   train:
     input: "data/DI.wav"    # Dry guitar input
     target: "data/effect.wav"  # Processed target
-  sample_rate: 48000
 ```
+
+`model.sample_rate` is the single source of truth for model construction, data
+resampling, latency calibration, inference, analysis, and saved audio.
 
 ## Project Structure
 
@@ -256,7 +259,7 @@ output = model(audio)
 from neural_fx.inference import StreamingProcessor
 
 # Create streaming processor
-processor = StreamingProcessor(model, sample_rate=48000)
+processor = StreamingProcessor(model)  # Uses model.sample_rate
 
 # Process single sample (for real-time audio callbacks)
 output_sample = processor.process_sample(input_sample)
