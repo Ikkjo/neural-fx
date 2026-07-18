@@ -31,7 +31,11 @@ class LSTMParams:
 
 @dataclass
 class WaveNetParams:
-    """Parameters for WaveNet models."""
+    """Parameters for a causal WaveNet model.
+
+    ``layers`` is the number of dilation layers in each stack. Every stack
+    repeats the dilation sequence ``1, 2, 4, ..., 2**(layers - 1)``.
+    """
 
     layers: int
     stacks: int = 3
@@ -39,6 +43,21 @@ class WaveNetParams:
     dilation_channels: int = 16
     residual_channels: int = 16
     skip_channels: int = 32
+
+    def __post_init__(self) -> None:
+        values = {
+            "layers": self.layers,
+            "stacks": self.stacks,
+            "kernel_size": self.kernel_size,
+            "dilation_channels": self.dilation_channels,
+            "residual_channels": self.residual_channels,
+            "skip_channels": self.skip_channels,
+        }
+        invalid = [name for name, value in values.items() if value <= 0]
+        if invalid:
+            raise ValueError(
+                "WaveNet parameters must be positive: " + ", ".join(invalid)
+            )
 
 
 @dataclass
@@ -58,9 +77,31 @@ class SSMParams:
     subset of fields that they support; unused fields are safe to ignore.
     """
 
+    d_model: int = 32
     d_state: int = 16
+    num_layers: int = 4
+    dropout: float = 0.0
+    prenorm: bool = True
     d_conv: int = 4
     expand: int = 2
+
+    def __post_init__(self) -> None:
+        positive_values = {
+            "d_model": self.d_model,
+            "d_state": self.d_state,
+            "num_layers": self.num_layers,
+            "d_conv": self.d_conv,
+            "expand": self.expand,
+        }
+        invalid = [
+            name for name, value in positive_values.items() if value <= 0
+        ]
+        if invalid:
+            raise ValueError(
+                "SSM parameters must be positive: " + ", ".join(invalid)
+            )
+        if not 0.0 <= self.dropout < 1.0:
+            raise ValueError("SSM dropout must be in the range [0, 1)")
 
 
 ModelParamsType = Union[LSTMParams, WaveNetParams, SSMParams]
