@@ -1,0 +1,44 @@
+version: "1.0"
+name: "wavenet_nano"
+
+model:
+  type: "wavenet"
+  input_size: 1
+  output_size: 1
+  sample_rate: 48000
+  params:
+    layers: 4
+    stacks: 1
+    kernel_size: 3
+    dilation_channels: 8
+    residual_channels: 8
+    skip_channels: 16
+
+training:
+  batch_size: 32
+  epochs: 100
+  segment_length: 8192
+  tbptt:
+    enabled: true
+    burn_in: 4096
+  seed: 42
+
+optimizer:
+  type: "adam"
+  lr: 0.01
+
+lr_scheduler:
+  type: "exponential"
+  gamma: 0.995
+
+loss:
+  type: "mse"
+  weights:
+    esr: 0.0
+    mse: 1.0
+  mask_first: 4096
+
+data:
+  train:
+    input: "data/DI.wav"
+    target: "data/effect.wav"
