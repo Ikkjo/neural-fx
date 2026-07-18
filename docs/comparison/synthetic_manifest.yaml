@@ -1,0 +1,52 @@
+schema_version: "1.0"
+name: Synthetic comparison fixture
+
+# These paths are placeholders. This fixture documents the schema and must not
+# be interpreted as a real Neural-FX model comparison.
+dataset:
+  train:
+    - input: fixtures/audio/train-input.wav
+      target: fixtures/audio/train-target.wav
+  validation:
+    - input: fixtures/audio/validation-input.wav
+      target: fixtures/audio/validation-target.wav
+  test:
+    - input: fixtures/audio/test-input.wav
+      target: fixtures/audio/test-target.wav
+
+parameter_budget:
+  target: 60000
+  tolerance: 0.10
+
+seeds: [42, 43, 44]
+
+shared_training:
+  sample_rate: 48000
+  segment_length: 8192
+  loss: mse
+  optimizer: adam
+  epochs: 100
+  early_stopping_patience: 10
+
+models:
+  - id: lstm-medium-42
+    architecture: lstm
+    seed: 42
+    config: fixtures/configs/lstm-medium.yaml
+    checkpoint: fixtures/checkpoints/lstm-medium-42.ckpt
+    size_label: medium
+    parameter_count: 59500
+  - id: lstm-medium-43
+    architecture: lstm
+    seed: 43
+    config: fixtures/configs/lstm-medium.yaml
+    checkpoint: fixtures/checkpoints/lstm-medium-43.ckpt
+    size_label: medium
+    parameter_count: 59500
+  - id: lstm-medium-44
+    architecture: lstm
+    seed: 44
+    config: fixtures/configs/lstm-medium.yaml
+    checkpoint: fixtures/checkpoints/lstm-medium-44.ckpt
+    size_label: medium
+    parameter_count: 59500
