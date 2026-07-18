@@ -1,0 +1,48 @@
+version: "1.0"
+name: "mamba_medium"
+
+model:
+  type: "mamba"
+  input_size: 1
+  output_size: 1
+  sample_rate: 48000
+  params:
+    d_model: 32
+    d_state: 16
+    num_layers: 6
+    dropout: 0.0
+    prenorm: true
+    d_conv: 4
+    expand: 2
+
+training:
+  batch_size: 16
+  epochs: 100
+  segment_length: 8192
+  tbptt:
+    enabled: false
+    burn_in: 4096
+  seed: 42
+
+optimizer:
+  type: "adam"
+  lr: 0.001
+
+lr_scheduler:
+  type: "exponential"
+  gamma: 0.995
+
+loss:
+  type: "mse"
+  weights:
+    esr: 0.0
+    mse: 1.0
+  pre_emphasis:
+    enabled: true
+    coef: 0.85
+  mask_first: 4096
+
+data:
+  train:
+    input: "data/DI.wav"
+    target: "data/effect.wav"
