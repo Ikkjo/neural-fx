@@ -192,6 +192,33 @@ class ValidationConfig:
     ignore_warnings: bool = False
 
 
+LoggerBackend = Literal["csv", "tensorboard"]
+
+
+@dataclass
+class LoggingConfig:
+    """Configuration for training metrics and experiment logs."""
+
+    backends: list[LoggerBackend] = field(
+        default_factory=lambda: ["csv", "tensorboard"]
+    )
+    save_dir: str = "lightning_logs"
+    log_every_n_steps: int = 50
+
+    def __post_init__(self) -> None:
+        supported = {"csv", "tensorboard"}
+        unknown = set(self.backends) - supported
+        if unknown:
+            unknown_names = ", ".join(sorted(unknown))
+            raise ValueError(f"Unknown logging backend(s): {unknown_names}")
+        if not self.backends:
+            raise ValueError("At least one logging backend must be configured")
+        if len(self.backends) != len(set(self.backends)):
+            raise ValueError("Logging backends must not contain duplicates")
+        if self.log_every_n_steps <= 0:
+            raise ValueError("logging.log_every_n_steps must be greater than zero")
+
+
 # =============================================================================
 # ROOT CONFIG
 # =============================================================================
@@ -209,6 +236,7 @@ class NeuralFXConfig:
     data: DataConfig
     latency: LatencyConfig | None = None
     validation: ValidationConfig | None = None
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @property
     def sample_rate(self) -> int:
@@ -283,6 +311,13 @@ def _load_validation_config(val_cfg: dict | None) -> ValidationConfig | None:
     return ValidationConfig(**val_cfg)
 
 
+def _load_logging_config(logging_cfg: dict | None) -> LoggingConfig:
+    """Load logging configuration while preserving defaults for older YAMLs."""
+    if logging_cfg is None:
+        return LoggingConfig()
+    return LoggingConfig(**logging_cfg)
+
+
 def load_config(path: Path | str) -> NeuralFXConfig:
     """Load and parse a YAML config file."""
     with open(path) as f:
@@ -338,6 +373,7 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     # Load latency and validation configs
     latency_cfg = _load_latency_config(d.get("latency"))
     validation_cfg = _load_validation_config(d.get("validation"))
+    logging_cfg = _load_logging_config(d.get("logging"))
 
     return NeuralFXConfig(
         version=version,
@@ -380,4 +416,5 @@ def load_config(path: Path | str) -> NeuralFXConfig:
         ),
         latency=latency_cfg,
         validation=validation_cfg,
+        logging=logging_cfg,
     )

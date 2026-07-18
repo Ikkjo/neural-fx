@@ -7,15 +7,79 @@ from pathlib import Path
 
 import lightning as L
 import torch
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.callbacks import LearningRateMonitor
+from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 
-from neural_fx.config import load_config, LatencyConfig
+from neural_fx.config import LatencyConfig, LoggingConfig, load_config
+from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
-from neural_fx.training.lightning_module import NeuralFXModule
-from neural_fx.training.callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
 from neural_fx.preprocessing.latency import LatencyCalibrator
 from neural_fx.preprocessing.validation import DataValidator
-from neural_fx.data.dataset import AudioDataset
+from neural_fx.training.callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
+from neural_fx.training.lightning_module import NeuralFXModule
+
+
+def _positive_int(value: str) -> int:
+    """Parse a strictly positive integer for command-line options."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+def _existing_logger_versions(save_dir: Path, experiment_name: str) -> list[int]:
+    """Return numeric Lightning logger versions already on disk."""
+    experiment_dir = save_dir / experiment_name
+    if not experiment_dir.is_dir():
+        return []
+
+    versions = []
+    for path in experiment_dir.iterdir():
+        prefix, separator, suffix = path.name.partition("_")
+        if path.is_dir() and prefix == "version" and separator and suffix.isdigit():
+            versions.append(int(suffix))
+    return versions
+
+
+def resolve_logger_version(
+    save_dir: Path, experiment_name: str, resume_path: str | None
+) -> int | str:
+    """Choose one shared run version for every configured logger.
+
+    A resumed checkpoint within a ``version_*`` directory reuses that exact
+    directory. Legacy checkpoints without version information reuse the latest
+    existing version, while a fresh run always receives the next numeric version.
+    """
+    versions = _existing_logger_versions(save_dir, experiment_name)
+
+    if resume_path:
+        for part in reversed(Path(resume_path).parts):
+            prefix, separator, suffix = part.partition("_")
+            if prefix == "version" and separator and suffix:
+                return int(suffix) if suffix.isdigit() else suffix
+        return max(versions) if versions else 0
+
+    return max(versions, default=-1) + 1
+
+
+def build_loggers(
+    logging_config: LoggingConfig, experiment_name: str, version: int | str
+) -> list[CSVLogger | TensorBoardLogger]:
+    """Build all requested loggers with a shared experiment directory."""
+    loggers: list[CSVLogger | TensorBoardLogger] = []
+    common_kwargs = {
+        "save_dir": logging_config.save_dir,
+        "name": experiment_name,
+        "version": version,
+    }
+    for backend in logging_config.backends:
+        if backend == "csv":
+            loggers.append(CSVLogger(**common_kwargs))
+        elif backend == "tensorboard":
+            loggers.append(
+                TensorBoardLogger(**common_kwargs, default_hp_metric=False)
+            )
+    return loggers
 
 
 def run_latency_calibration(config, input_path: str, target_path: str):
@@ -102,8 +166,8 @@ def main():
     parser.add_argument(
         "--checkpoint_dir",
         type=str,
-        default="./lightning_logs",
-        help="Checkpoint directory",
+        default=None,
+        help="Override the config directory for checkpoints and logs",
     )
     parser.add_argument(
         "--resume", type=str, default=None, help="Path to checkpoint to resume from"
@@ -155,6 +219,19 @@ def main():
         action="store_true",
         help="Generate plots after training",
     )
+    parser.add_argument(
+        "--loggers",
+        nargs="+",
+        choices=["csv", "tensorboard"],
+        default=None,
+        help="Override logging backends (for example: csv tensorboard)",
+    )
+    parser.add_argument(
+        "--log_every_n_steps",
+        type=_positive_int,
+        default=None,
+        help="Override the training metric logging interval",
+    )
     args = parser.parse_args()
 
     # Load config
@@ -171,6 +248,16 @@ def main():
             config.latency = LatencyConfig()
         config.latency.manual_delay = args.latency_manual
         config.latency.method = "manual"
+
+    if args.loggers is not None:
+        config.logging.backends = args.loggers
+    if args.log_every_n_steps is not None:
+        config.logging.log_every_n_steps = args.log_every_n_steps
+
+    output_dir = Path(args.checkpoint_dir or config.logging.save_dir)
+    config.logging.save_dir = str(output_dir)
+    logger_version = resolve_logger_version(output_dir, config.name, args.resume)
+    run_dir = output_dir / config.name / f"version_{logger_version}"
 
     L.seed_everything(config.training.seed, workers=True)
 
@@ -193,7 +280,7 @@ def main():
     epochs = args.max_epochs if args.max_epochs else config.training.epochs
 
     # Setup callbacks
-    callbacks = []
+    callbacks = [LearningRateMonitor(logging_interval="epoch")]
 
     # Enhanced checkpoint callback
     latency_cal_dict = None
@@ -209,7 +296,7 @@ def main():
         input_file=input_path,
         target_file=target_path,
         latency_calibration=latency_cal_dict,
-        dirpath=Path(args.checkpoint_dir) / config.name,
+        dirpath=run_dir / "checkpoints",
         filename="{epoch:02d}-{val_loss:.4f}",
         save_top_k=3,
         monitor="val_loss" if config.data.val else "train_loss",
@@ -231,11 +318,9 @@ def main():
     # Determine device
     use_gpu = not args.cpu and args.gpus > 0 and torch.cuda.is_available()
 
-    # Setup logger - use CSVLogger to avoid TensorBoard -1 value issues
-    logger = CSVLogger(
-        save_dir=args.checkpoint_dir,
-        name=config.name,
-    )
+    # Keep all backends in the same version directory. TensorBoard creates a new
+    # event file on resume, preserving the earlier event history.
+    loggers = build_loggers(config.logging, config.name, logger_version)
 
     # Setup trainer kwargs
     trainer_kwargs = {
@@ -246,7 +331,8 @@ def main():
         "gradient_clip_val": 1.0,
         "enable_progress_bar": True,
         "val_check_interval": args.val_check_interval,
-        "logger": logger,
+        "logger": loggers,
+        "log_every_n_steps": config.logging.log_every_n_steps,
     }
 
     # Add validation if available
@@ -302,7 +388,7 @@ def main():
             )
 
             # Generate report
-            plot_dir = Path(args.checkpoint_dir) / config.name / "plots"
+            plot_dir = run_dir / "plots"
             plot_dir.mkdir(parents=True, exist_ok=True)
             report = analyzer.generate_report(analysis_dataset, plot_dir)
 

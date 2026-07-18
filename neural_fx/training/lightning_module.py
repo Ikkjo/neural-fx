@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from ..config import NeuralFXConfig, LossConfig
+from ..config import LossConfig, NeuralFXConfig
 from ..data.dataset import AudioDataset
 from ..data.transforms import build_augmentation_transform
 from ..losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
@@ -22,12 +22,15 @@ class NeuralFXModule(L.LightningModule):
         # We manually extract scalar values from config to avoid nested dataclass issues
         hparams = {
             "model_type": config.model.type,
-            "sample_rate": config.model.sample_rate,
+            "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
+            "sample_rate": config.sample_rate,
             "batch_size": config.training.batch_size,
             "segment_length": config.training.segment_length,
+            "epochs": config.training.epochs,
             "lr": config.optimizer.lr,
             "optimizer": config.optimizer.type,
             "scheduler": config.lr_scheduler.type,
+            "scheduler_gamma": config.lr_scheduler.gamma,
             "loss_type": config.loss.type,
         }
         self.save_hyperparameters(hparams)
@@ -123,7 +126,7 @@ class NeuralFXModule(L.LightningModule):
             y = y[..., self.burn_in :]
 
         loss = self.loss_fn(pred, y)
-        self.log("train_loss", loss, prog_bar=True)
+        self._log_training_loss(loss, batch_size=x.shape[0])
         return loss
 
     def _training_step_tbptt(self, x: Tensor, y: Tensor, batch_idx: int) -> Tensor:
@@ -161,9 +164,28 @@ class NeuralFXModule(L.LightningModule):
 
         if total_samples > 0:
             avg_loss = total_loss / total_samples
-            self.log("train_loss", avg_loss, prog_bar=True)
+            self._log_training_loss(avg_loss, batch_size=x.shape[0])
             return avg_loss
         return torch.tensor(0.0, device=x.device)
+
+    def _log_training_loss(self, loss: Tensor, batch_size: int) -> None:
+        """Log live step loss and a separately aggregated epoch loss."""
+        self.log(
+            "train_loss_step",
+            loss,
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "train_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            batch_size=batch_size,
+        )
 
     def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         x, y = batch
@@ -178,7 +200,14 @@ class NeuralFXModule(L.LightningModule):
             y = y[..., self.burn_in :]
 
         loss = self.loss_fn(pred, y)
-        self.log("val_loss", loss, prog_bar=True)
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=x.shape[0],
+        )
         return loss
 
     def configure_optimizers(

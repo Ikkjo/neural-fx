@@ -32,7 +32,19 @@ python scripts/train.py --config configs/models/gru/gru_medium.yaml
 
 # Train with custom epochs
 python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epochs 50
+
+# Override the configured logging interval or backends
+python scripts/train.py --config configs/models/lstm/lstm_small.yaml \
+    --log_every_n_steps 10 --loggers csv tensorboard
+
+# Inspect live metrics in another terminal
+tensorboard --logdir lightning_logs
 ```
+
+Training writes CSV metrics and TensorBoard events to the same
+`lightning_logs/<model>/version_<n>/` directory by default. Resuming a checkpoint
+inside that run directory reuses its version and adds a new TensorBoard event file,
+preserving the earlier event history.
 
 ### Exporting a Trained Model
 
@@ -40,13 +52,13 @@ python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epoch
 # Export to all formats (ONNX, TorchScript, RTNeural)
 python scripts/export.py \
     --config configs/models/lstm/lstm_medium.yaml \
-    --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
+    --checkpoint lightning_logs/lstm_medium/version_0/checkpoints/epoch=10.ckpt \
     --output_dir ./exports
 
 # Export to specific formats only
 python scripts/export.py \
     --config configs/models/lstm/lstm_medium.yaml \
-    --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
+    --checkpoint lightning_logs/lstm_medium/version_0/checkpoints/epoch=10.ckpt \
     --formats onnx,torchscript
 ```
 
@@ -144,6 +156,11 @@ training:
     enabled: true
     burn_in: 4096  # Samples to warm up hidden state
   seed: 42
+
+logging:
+  backends: ["csv", "tensorboard"]
+  save_dir: "lightning_logs"
+  log_every_n_steps: 50
 
 optimizer:
   type: "adam"

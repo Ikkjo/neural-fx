@@ -15,6 +15,7 @@ setup(
         "tqdm",
         "matplotlib",
         "lightning",
+        "tensorboard",
         "pyyaml",
     ],
     extras_require={"dev": ["pytest", "pytest-cov", "pytest-xdist", "ruff"]},
