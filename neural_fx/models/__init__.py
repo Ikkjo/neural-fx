@@ -1,15 +1,25 @@
 from .base import BaseNeuralFXModel
+from .errors import UnsupportedExportFormatError
+from .mamba import MambaModel
 from .recurrent import NeuralfxLSTM, NeuralfxGRU, RecurrentNeuralFXModel
+from .ssm import S4Model
+from .wavenet import WaveNetModel
 
 __all__ = [
     "BaseNeuralFXModel",
     "NeuralfxLSTM",
     "NeuralfxGRU",
     "RecurrentNeuralFXModel",
+    "WaveNetModel",
+    "S4Model",
+    "MambaModel",
     "MODEL_REGISTRY",
+    "MODEL_EXPORT_FORMATS",
     "create_model_from_config",
     "register_model",
     "get_available_models",
+    "get_supported_export_formats",
+    "validate_export_formats",
 ]
 
 
@@ -17,10 +27,17 @@ __all__ = [
 MODEL_REGISTRY: dict[str, type[BaseNeuralFXModel]] = {
     "lstm": NeuralfxLSTM,
     "gru": NeuralfxGRU,
-    # Placeholder entries for models that may be implemented later
-    # "wavenet": WaveNetModel,
-    # "mamba": MambaModel,
-    # "s4": S4Model,
+    "wavenet": WaveNetModel,
+    "s4": S4Model,
+    "mamba": MambaModel,
+}
+
+MODEL_EXPORT_FORMATS: dict[str, frozenset[str]] = {
+    "lstm": frozenset({"onnx", "torchscript", "rtneural"}),
+    "gru": frozenset({"onnx", "torchscript", "rtneural"}),
+    "wavenet": frozenset({"onnx", "torchscript"}),
+    "s4": frozenset({"onnx", "torchscript"}),
+    "mamba": frozenset(),
 }
 
 
@@ -32,7 +49,31 @@ def register_model(name: str, model_class: type[BaseNeuralFXModel]) -> None:
         name: Model type name (used in config files).
         model_class: The model class to register.
     """
-    MODEL_REGISTRY[name] = model_class
+    normalized = name.lower()
+    MODEL_REGISTRY[normalized] = model_class
+    MODEL_EXPORT_FORMATS.setdefault(normalized, frozenset())
+
+
+def get_supported_export_formats(model_type: str) -> frozenset[str]:
+    """Return the export formats supported by a registered model type."""
+    normalized = model_type.lower()
+    if normalized not in MODEL_REGISTRY:
+        raise ValueError(
+            f"Unknown model type: {model_type!r}. "
+            f"Available types: {list(MODEL_REGISTRY)}"
+        )
+    return MODEL_EXPORT_FORMATS[normalized]
+
+
+def validate_export_formats(model_type: str, formats: list[str]) -> None:
+    """Validate requested formats before constructing an optional model."""
+    known_formats = {"onnx", "torchscript", "rtneural"}
+    supported = get_supported_export_formats(model_type)
+    for export_format in formats:
+        if export_format not in known_formats:
+            raise ValueError(f"Unknown export format: {export_format!r}")
+        if export_format not in supported:
+            raise UnsupportedExportFormatError(model_type.lower(), export_format)
 
 
 def create_model_from_config(config) -> BaseNeuralFXModel:

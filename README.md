@@ -21,6 +21,17 @@ cd neural-fx
 pip install -e .
 ```
 
+Mamba support is optional and requires Linux, CUDA-enabled PyTorch, a
+compatible NVIDIA GPU, and the `mamba-ssm` package:
+
+```bash
+pip install -e .[mamba]
+```
+
+LSTM and GRU support ONNX, TorchScript, and RTNeural export. WaveNet and S4D
+support ONNX and TorchScript. Mamba currently reports all three export formats
+as unsupported and is intended for CUDA-backed PyTorch inference.
+
 ### Training a Model
 
 ```bash

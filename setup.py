@@ -18,5 +18,8 @@ setup(
         "tensorboard",
         "pyyaml",
     ],
-    extras_require={"dev": ["pytest", "pytest-cov", "pytest-xdist", "ruff"]},
+    extras_require={
+        "dev": ["pytest", "pytest-cov", "pytest-xdist", "ruff"],
+        "mamba": ["mamba-ssm; platform_system == 'Linux'"],
+    },
 )

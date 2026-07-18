@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from neural_fx.config import load_config
-from neural_fx.models.recurrent import RecurrentNeuralFXModel
+from neural_fx.models import create_model_from_config, validate_export_formats
 
 
 def main():
@@ -32,7 +32,12 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    model = RecurrentNeuralFXModel.from_config(config.model)
+    formats = [item.strip().lower() for item in args.formats.split(",")]
+    if not formats or any(not item for item in formats):
+        raise ValueError("At least one non-empty export format is required")
+    validate_export_formats(config.model.type, formats)
+
+    model = create_model_from_config(config.model)
 
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
     state_dict = checkpoint.get("state_dict", checkpoint)
@@ -51,8 +56,6 @@ def main():
     output_dir = Path(args.output_dir) / config.name
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    formats = [f.strip().lower() for f in args.formats.split(",")]
-
     for fmt in formats:
         if fmt == "onnx":
             output_path = output_dir / f"{config.name}.onnx"
@@ -68,9 +71,6 @@ def main():
             output_path = output_dir / f"{config.name}.json"
             model.export_rtneural(output_path)
             print(f"Exported RTNeural model to {output_path}")
-
-        else:
-            print(f"Unknown format: {fmt}")
 
     print("Export complete.")
 
