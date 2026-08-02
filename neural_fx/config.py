@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Union
+
 import yaml
 
 # =============================================================================
@@ -166,17 +167,21 @@ class DataPaths:
 class DataConfig:
     train: DataPaths
     val: DataPaths | None = None  # Optional validation data paths
-    sample_rate: int = 48000
 
 
 @dataclass
 class LatencyConfig:
     """Configuration for latency calibration between input and output audio."""
 
-    enabled: bool = True
     method: str = "xcorr"  # xcorr, manual
     manual_delay: int | None = None
     max_delay: int = 10000
+    calibration_duration_seconds: float = 5.0
+
+    def __post_init__(self) -> None:
+        """Validate latency calibration settings."""
+        if self.calibration_duration_seconds < 0:
+            raise ValueError("calibration_duration_seconds cannot be negative")
 
 
 @dataclass
@@ -205,8 +210,13 @@ class NeuralFXConfig:
     lr_scheduler: LRSchedulerConfig
     loss: LossConfig
     data: DataConfig
-    latency: LatencyConfig | None = None
+    latency: LatencyConfig = field(default_factory=LatencyConfig)
     validation: ValidationConfig | None = None
+
+    @property
+    def sample_rate(self) -> int:
+        """Authoritative sample rate for models, data, and audio processing."""
+        return self.model.sample_rate
 
 
 # =============================================================================
@@ -262,10 +272,15 @@ def _load_stft_loss_config(stft_cfg: dict | None) -> STFTLossConfig | None:
     return config
 
 
-def _load_latency_config(lat_cfg: dict | None) -> LatencyConfig | None:
+def _load_latency_config(lat_cfg: dict | None) -> LatencyConfig:
     """Load latency configuration from dict."""
     if lat_cfg is None:
         return LatencyConfig()  # Return default config
+    if "enabled" in lat_cfg:
+        raise ValueError(
+            "latency.enabled is no longer supported; set "
+            "latency.calibration_duration_seconds to 0 to disable calibration."
+        )
     return LatencyConfig(**lat_cfg)
 
 
@@ -291,6 +306,12 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     data_cfg = d["data"]
     train_data_cfg = data_cfg["train"]
     val_data_cfg = data_cfg.get("val")
+
+    if "sample_rate" in data_cfg:
+        raise ValueError(
+            "data.sample_rate is no longer supported; configure the authoritative "
+            "sample rate under model.sample_rate."
+        )
 
     # Load augmentation config
     training_cfg = d["training"]
@@ -344,7 +365,6 @@ def load_config(path: Path | str) -> NeuralFXConfig:
         data=DataConfig(
             train=DataPaths(**train_data_cfg),
             val=DataPaths(**val_data_cfg) if val_data_cfg else None,
-            sample_rate=data_cfg.get("sample_rate", 48000),
         ),
         latency=latency_cfg,
         validation=validation_cfg,

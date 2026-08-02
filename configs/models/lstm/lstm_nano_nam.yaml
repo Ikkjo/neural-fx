@@ -45,7 +45,6 @@ loss:
 
 # NAM-specific configuration
 latency:
-  enabled: true
   method: "blip"  # Use blip detection for NAM inputs
   manual_delay: null
   max_delay: 10000
@@ -64,4 +63,3 @@ data:
   val:
     input: "data/nam_input_v3.wav"
     target: "data/nam_output.wav"
-  sample_rate: 48000

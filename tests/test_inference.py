@@ -59,8 +59,15 @@ class TestStreamingInference:
 
     def test_streaming_processor_creation(self, simple_model):
         """Test StreamingProcessor can be created."""
-        processor = StreamingProcessor(simple_model, sample_rate=48000)
+        processor = StreamingProcessor(simple_model)
         assert processor.model is not None
+        assert processor.sample_rate == 48000
+
+    def test_streaming_processor_warns_for_conflicting_rate(self, simple_model):
+        """Warn and retain the model rate when an inference override conflicts."""
+        with pytest.warns(UserWarning, match="using the model sample rate"):
+            processor = StreamingProcessor(simple_model, sample_rate=44100)
+
         assert processor.sample_rate == 48000
 
     def test_streaming_processor_process_sample(self, simple_model):
@@ -167,16 +174,38 @@ class TestStreamingInference:
             assert output_path.exists()
             assert output.ndim == 3  # [batch, channels, time]
 
+    def test_process_audio_uses_model_sample_rate(self):
+        """Processing resamples and saves using a non-default model rate."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, num_layers=1),
+            input_size=1,
+            output_size=1,
+            sample_rate=44100,
+        )
+        model = NeuralfxLSTM(config).eval()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            input_path = tmpdir / "input.wav"
+            output_path = tmpdir / "output.wav"
+            torchaudio.save(str(input_path), torch.randn(1, 4800), 48000)
+
+            output = process_audio(model, input_path, output_path, chunk_size=1024)
+            output_info = torchaudio.info(str(output_path))
+
+            assert output_info.sample_rate == 44100
+            assert output.shape[-1] == 4410
+
     def test_evaluate_model(self, simple_model, temp_audio_file):
         """Test model evaluation against target."""
-        input_path, sample_rate = temp_audio_file
+        input_path, _ = temp_audio_file
 
         # Use same file as target (not realistic but good for testing)
         metrics = evaluate_model(
             model=simple_model,
             input_path=input_path,
             target_path=input_path,
-            sample_rate=sample_rate,
             burn_in=0,
         )
 

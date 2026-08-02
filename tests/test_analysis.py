@@ -73,6 +73,19 @@ class TestTrainingAnalyzer:
         analyzer = create_analyzer(temp_model)
         assert isinstance(analyzer, TrainingAnalyzer)
 
+    def test_analyzer_uses_model_sample_rate(self):
+        """Plotting inherits the authoritative model sample rate."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, num_layers=1),
+            sample_rate=44100,
+        )
+        analyzer = TrainingAnalyzer(NeuralfxLSTM(config))
+
+        assert analyzer._resolve_sample_rate() == 44100
+        with pytest.warns(UserWarning, match="using the configured sample rate"):
+            assert analyzer._resolve_sample_rate(48000) == 44100
+
     def test_calculate_esr(self, temp_model):
         """Test ESR calculation."""
         analyzer = TrainingAnalyzer(temp_model)

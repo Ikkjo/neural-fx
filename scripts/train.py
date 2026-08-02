@@ -9,18 +9,18 @@ import lightning as L
 import torch
 from lightning.pytorch.loggers import CSVLogger
 
-from neural_fx.config import load_config, LatencyConfig
+from neural_fx.config import load_config
+from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
-from neural_fx.training.lightning_module import NeuralFXModule
-from neural_fx.training.callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
 from neural_fx.preprocessing.latency import LatencyCalibrator
 from neural_fx.preprocessing.validation import DataValidator
-from neural_fx.data.dataset import AudioDataset
+from neural_fx.training.callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
+from neural_fx.training.lightning_module import NeuralFXModule
 
 
 def run_latency_calibration(config, input_path: str, target_path: str):
-    """Run latency calibration if enabled."""
-    if config.latency is None or not config.latency.enabled:
+    """Run latency calibration when its configured duration is positive."""
+    if config.latency.calibration_duration_seconds == 0:
         return None
 
     print(f"Running latency calibration using {config.latency.method} method...")
@@ -29,8 +29,10 @@ def run_latency_calibration(config, input_path: str, target_path: str):
     dataset = AudioDataset(
         input_path=input_path,
         target_path=target_path,
-        segment_length=48000 * 5,  # Use 5 seconds for calibration
-        sample_rate=config.data.sample_rate,
+        segment_length=round(
+            config.sample_rate * config.latency.calibration_duration_seconds
+        ),
+        sample_rate=config.sample_rate,
         normalize=True,
     )
 
@@ -160,13 +162,9 @@ def main():
 
     # Override config with CLI arguments
     if args.latency_method:
-        if config.latency is None:
-            config.latency = LatencyConfig()
         config.latency.method = args.latency_method
 
     if args.latency_manual is not None:
-        if config.latency is None:
-            config.latency = LatencyConfig()
         config.latency.manual_delay = args.latency_manual
         config.latency.method = "manual"
 
@@ -294,7 +292,7 @@ def main():
                 input_path=input_path,
                 target_path=target_path,
                 segment_length=config.training.segment_length,
-                sample_rate=config.data.sample_rate,
+                sample_rate=config.sample_rate,
                 latency_calibration=latency_calibration,
                 random_segments=False,
             )

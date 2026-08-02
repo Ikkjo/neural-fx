@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,21 @@ from ..losses.audio_losses import ESR, MSE
 
 if TYPE_CHECKING:
     from ..models.base import BaseNeuralFXModel
+
+
+def _resolve_model_sample_rate(
+    model: "BaseNeuralFXModel", sample_rate: int | None
+) -> int:
+    """Resolve a model-aware sample rate without allowing conflicting overrides."""
+    model_sample_rate = int(model.sample_rate)
+    if sample_rate is not None and int(sample_rate) != model_sample_rate:
+        warnings.warn(
+            f"Requested sample rate {sample_rate} does not match the model sample "
+            f"rate {model_sample_rate}; using the model sample rate.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return model_sample_rate
 
 
 def load_audio(path: str | Path, sample_rate: int = 48000) -> Tensor:
@@ -48,10 +64,11 @@ def process_audio(
     model: "BaseNeuralFXModel",
     input_path: str | Path,
     output_path: str | Path,
-    sample_rate: int = 48000,
+    sample_rate: int | None = None,
     chunk_size: int = 8192,
 ) -> Tensor:
     """Process audio file through model."""
+    sample_rate = _resolve_model_sample_rate(model, sample_rate)
     model.eval()
     model.reset_state()
 
@@ -86,10 +103,11 @@ def evaluate_model(
     model: "BaseNeuralFXModel",
     input_path: str | Path,
     target_path: str | Path,
-    sample_rate: int = 48000,
+    sample_rate: int | None = None,
     burn_in: int = 0,
 ) -> dict[str, float]:
     """Evaluate model against target audio."""
+    sample_rate = _resolve_model_sample_rate(model, sample_rate)
     model.eval()
     model.reset_state()
 
@@ -125,9 +143,9 @@ def evaluate_model(
 class StreamingProcessor:
     """Real-time streaming processor for model inference."""
 
-    def __init__(self, model, sample_rate: int = 48000):
+    def __init__(self, model: "BaseNeuralFXModel", sample_rate: int | None = None):
         self.model = model
-        self.sample_rate = sample_rate
+        self.sample_rate = _resolve_model_sample_rate(model, sample_rate)
         self.model.eval()
         self.model.reset_state()
 
