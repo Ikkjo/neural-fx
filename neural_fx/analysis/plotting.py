@@ -1,5 +1,6 @@
 """Plotting utilities for analyzing neural audio effects models."""
 
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -32,9 +33,11 @@ class TrainingAnalyzer:
             else self.model.sample_rate
         )
         if sample_rate is not None and int(sample_rate) != configured_rate:
-            raise ValueError(
+            warnings.warn(
                 f"Requested sample rate {sample_rate} does not match the configured "
-                f"sample rate {configured_rate}."
+                f"sample rate {configured_rate}; using the configured sample rate.",
+                UserWarning,
+                stacklevel=2,
             )
         return configured_rate
 

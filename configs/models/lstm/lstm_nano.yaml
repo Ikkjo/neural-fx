@@ -49,7 +49,6 @@ data:
     target: "data/pearl_clean_sm57.wav"
 
 latency:
-  enabled: true
   method: "xcorr"
   max_delay: 1000
 

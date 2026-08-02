@@ -45,7 +45,6 @@ loss:
 
 # NAM-specific configuration
 latency:
-  enabled: true
   method: "blip"  # Use blip detection for NAM inputs
   manual_delay: null
   max_delay: 10000

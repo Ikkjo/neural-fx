@@ -1,4 +1,3 @@
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Union
@@ -174,11 +173,15 @@ class DataConfig:
 class LatencyConfig:
     """Configuration for latency calibration between input and output audio."""
 
-    enabled: bool = True
     method: str = "xcorr"  # xcorr, manual
     manual_delay: int | None = None
     max_delay: int = 10000
     calibration_duration_seconds: float = 5.0
+
+    def __post_init__(self) -> None:
+        """Validate latency calibration settings."""
+        if self.calibration_duration_seconds < 0:
+            raise ValueError("calibration_duration_seconds cannot be negative")
 
 
 @dataclass
@@ -207,7 +210,7 @@ class NeuralFXConfig:
     lr_scheduler: LRSchedulerConfig
     loss: LossConfig
     data: DataConfig
-    latency: LatencyConfig | None = None
+    latency: LatencyConfig = field(default_factory=LatencyConfig)
     validation: ValidationConfig | None = None
 
     @property
@@ -269,10 +272,15 @@ def _load_stft_loss_config(stft_cfg: dict | None) -> STFTLossConfig | None:
     return config
 
 
-def _load_latency_config(lat_cfg: dict | None) -> LatencyConfig | None:
+def _load_latency_config(lat_cfg: dict | None) -> LatencyConfig:
     """Load latency configuration from dict."""
     if lat_cfg is None:
         return LatencyConfig()  # Return default config
+    if "enabled" in lat_cfg:
+        raise ValueError(
+            "latency.enabled is no longer supported; set "
+            "latency.calibration_duration_seconds to 0 to disable calibration."
+        )
     return LatencyConfig(**lat_cfg)
 
 
@@ -299,30 +307,10 @@ def load_config(path: Path | str) -> NeuralFXConfig:
     train_data_cfg = data_cfg["train"]
     val_data_cfg = data_cfg.get("val")
 
-    model_sample_rate = model_cfg.get("sample_rate")
-    legacy_data_sample_rate = data_cfg.get("sample_rate")
-    if (
-        model_sample_rate is not None
-        and legacy_data_sample_rate is not None
-        and model_sample_rate != legacy_data_sample_rate
-    ):
+    if "sample_rate" in data_cfg:
         raise ValueError(
-            "Conflicting sample rates: model.sample_rate "
-            f"({model_sample_rate}) does not match deprecated data.sample_rate "
-            f"({legacy_data_sample_rate}). Remove data.sample_rate and keep the "
-            "authoritative value under model.sample_rate."
-        )
-    if legacy_data_sample_rate is not None:
-        warnings.warn(
-            "data.sample_rate is deprecated; move the value to model.sample_rate.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    if model_sample_rate is None:
-        model_sample_rate = (
-            legacy_data_sample_rate
-            if legacy_data_sample_rate is not None
-            else 48000
+            "data.sample_rate is no longer supported; configure the authoritative "
+            "sample rate under model.sample_rate."
         )
 
     # Load augmentation config
@@ -347,7 +335,7 @@ def load_config(path: Path | str) -> NeuralFXConfig:
             params=_load_model_params(model_type, model_params),
             input_size=model_cfg.get("input_size", 1),
             output_size=model_cfg.get("output_size", 1),
-            sample_rate=model_sample_rate,
+            sample_rate=model_cfg.get("sample_rate", 48000),
         ),
         training=TrainingConfig(
             batch_size=training_cfg.get("batch_size", 32),

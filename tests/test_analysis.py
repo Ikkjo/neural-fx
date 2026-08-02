@@ -83,8 +83,8 @@ class TestTrainingAnalyzer:
         analyzer = TrainingAnalyzer(NeuralfxLSTM(config))
 
         assert analyzer._resolve_sample_rate() == 44100
-        with pytest.raises(ValueError, match="does not match the configured"):
-            analyzer._resolve_sample_rate(48000)
+        with pytest.warns(UserWarning, match="using the configured sample rate"):
+            assert analyzer._resolve_sample_rate(48000) == 44100
 
     def test_calculate_esr(self, temp_model):
         """Test ESR calculation."""

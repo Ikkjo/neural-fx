@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,9 +18,11 @@ def _resolve_model_sample_rate(
     """Resolve a model-aware sample rate without allowing conflicting overrides."""
     model_sample_rate = int(model.sample_rate)
     if sample_rate is not None and int(sample_rate) != model_sample_rate:
-        raise ValueError(
+        warnings.warn(
             f"Requested sample rate {sample_rate} does not match the model sample "
-            f"rate {model_sample_rate}. The model configuration is authoritative."
+            f"rate {model_sample_rate}; using the model sample rate.",
+            UserWarning,
+            stacklevel=2,
         )
     return model_sample_rate
 

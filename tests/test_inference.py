@@ -63,10 +63,12 @@ class TestStreamingInference:
         assert processor.model is not None
         assert processor.sample_rate == 48000
 
-    def test_streaming_processor_rejects_conflicting_rate(self, simple_model):
-        """Model-aware inference must not override the configured rate."""
-        with pytest.raises(ValueError, match="model configuration is authoritative"):
-            StreamingProcessor(simple_model, sample_rate=44100)
+    def test_streaming_processor_warns_for_conflicting_rate(self, simple_model):
+        """Warn and retain the model rate when an inference override conflicts."""
+        with pytest.warns(UserWarning, match="using the model sample rate"):
+            processor = StreamingProcessor(simple_model, sample_rate=44100)
+
+        assert processor.sample_rate == 48000
 
     def test_streaming_processor_process_sample(self, simple_model):
         """Test processing single samples."""

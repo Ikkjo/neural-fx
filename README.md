@@ -98,7 +98,6 @@ python scripts/train.py \
 ```yaml
 # NAM-specific configuration
 latency:
-  enabled: true
   method: "blip"  # Use blip detection for NAM inputs
   manual_delay: null
   max_delay: 10000
@@ -171,6 +170,8 @@ data:
 
 `model.sample_rate` is the single source of truth for model construction, data
 resampling, latency calibration, inference, analysis, and saved audio.
+Set `latency.calibration_duration_seconds` to `0` to disable latency
+calibration; positive values select how much audio is used.
 
 ## Project Structure
 
