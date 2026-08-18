@@ -2,13 +2,14 @@
 """Training script for neural audio effects models with validation support."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 import lightning as L
 import torch
 
-from neural_fx.config import load_config
+from neural_fx.config import NeuralFXConfig, load_config
 from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
 from neural_fx.preprocessing.latency import LatencyCalibrator
@@ -33,7 +34,7 @@ def run_latency_calibration(config, input_path: str, target_path: str):
             config.sample_rate * config.latency.calibration_duration_seconds
         ),
         sample_rate=config.sample_rate,
-        normalize=True,
+        normalize=config.data.normalize,
     )
 
     # Get first segment
@@ -88,6 +89,13 @@ def run_data_validation(config, input_path: str, target_path: str, ignore_checks
         # Don't fail on warnings alone unless explicitly requested
 
     return True
+
+
+def create_trainer(
+    config: NeuralFXConfig, trainer_kwargs: dict[str, object]
+) -> L.Trainer:
+    """Create a Lightning trainer with the config's determinism contract."""
+    return L.Trainer(deterministic=config.training.deterministic, **trainer_kwargs)
 
 
 def main():
@@ -174,6 +182,14 @@ def main():
         config.latency.manual_delay = args.latency_manual
         config.latency.method = "manual"
 
+    if config.training.deterministic:
+        workspace_config = os.environ.get("CUBLAS_WORKSPACE_CONFIG")
+        if workspace_config not in (None, ":4096:8"):
+            raise ValueError(
+                "Deterministic training requires CUBLAS_WORKSPACE_CONFIG=:4096:8; "
+                f"found {workspace_config!r}"
+            )
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     L.seed_everything(config.training.seed, workers=True)
 
     # Run data validation
@@ -235,13 +251,14 @@ def main():
 
     # Early stopping callback
     patience = args.patience if args.patience else 10
-    early_stop_callback = ValidationEarlyStopping(
-        monitor="val_loss" if config.data.val else "train_loss",
-        min_delta=0.0,
-        patience=patience,
-        mode="min",
-    )
-    callbacks.append(early_stop_callback)
+    if config.training.early_stopping:
+        early_stop_callback = ValidationEarlyStopping(
+            monitor="val_loss" if config.data.val else "train_loss",
+            min_delta=0.0,
+            patience=patience,
+            mode="min",
+        )
+        callbacks.append(early_stop_callback)
 
     # Determine device
     use_gpu = not args.cpu and args.gpus > 0 and torch.cuda.is_available()
@@ -276,7 +293,7 @@ def main():
     if resume_path:
         print(f"Resuming from checkpoint: {resume_path}")
 
-    trainer = L.Trainer(**trainer_kwargs)
+    trainer = create_trainer(config, trainer_kwargs)
 
     # Train
     if resume_path:

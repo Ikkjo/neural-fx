@@ -244,6 +244,7 @@ class NeuralFXModule(L.LightningModule):
             random_segments=self.config.training.random_segments,
             transform=self.transform,
             latency_calibration=self.train_latency,
+            normalize=self.config.data.normalize,
         )
 
     def _create_val_dataset(self) -> AudioDataset | None:
@@ -259,6 +260,7 @@ class NeuralFXModule(L.LightningModule):
             random_segments=False,  # Sequential for validation
             transform=None,  # No augmentation for validation
             latency_calibration=self.val_latency,
+            normalize=self.config.data.normalize,
         )
 
     def train_dataloader(self) -> DataLoader:

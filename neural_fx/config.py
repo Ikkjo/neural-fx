@@ -110,6 +110,8 @@ class TrainingConfig:
     random_segments: bool = False  # Use random segment sampling
     tbptt: TBPTTConfig | None = None
     seed: int = 42
+    deterministic: bool = False
+    early_stopping: bool = True
     augmentation: AugmentationConfig | None = None
     num_workers: int = 4
 
@@ -170,6 +172,7 @@ class DataPaths:
 class DataConfig:
     train: DataPaths
     val: DataPaths | None = None  # Optional validation data paths
+    normalize: bool = True
 
 
 @dataclass
@@ -350,6 +353,8 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             if training_cfg.get("tbptt")
             else None,
             seed=training_cfg.get("seed", 42),
+            deterministic=training_cfg.get("deterministic", False),
+            early_stopping=training_cfg.get("early_stopping", True),
             augmentation=augmentation,
             num_workers=training_cfg.get("num_workers", 4),
         ),
@@ -369,6 +374,7 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
         data=DataConfig(
             train=DataPaths(**train_data_cfg),
             val=DataPaths(**val_data_cfg) if val_data_cfg else None,
+            normalize=data_cfg.get("normalize", True),
         ),
         latency=latency_cfg,
         validation=validation_cfg,
