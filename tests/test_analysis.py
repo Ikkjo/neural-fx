@@ -1,31 +1,31 @@
 """Tests for analysis/plotting module."""
 
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
 import torch
 import torchaudio
-import pytest
 
 from neural_fx.analysis.plotting import TrainingAnalyzer, create_analyzer
 from neural_fx.config import (
     DataConfig,
     DataPaths,
+    LossConfig,
     LRSchedulerConfig,
     LSTMParams,
-    LossConfig,
     ModelConfig,
     NeuralFXConfig,
     OptimizerConfig,
     TrainingConfig,
 )
-from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
+from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.training.lightning_module import NeuralFXModule
 from scripts.analyze import load_checkpoint
 

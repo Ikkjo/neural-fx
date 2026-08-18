@@ -39,7 +39,7 @@ pytest -k "lstm"
 pytest -n auto
 
 # Run the optional ONNX exporter tests explicitly
-pytest --run-onnx tests/test_export.py
+pytest --run-onnx tests/test_export.py tests/test_wavenet.py
 ```
 
 The default suite skips ONNX export tests. The exporter is a heavyweight,

@@ -79,6 +79,7 @@ def test_wavenet_config_and_torchscript_export(tmp_path: Path) -> None:
     torch.testing.assert_close(actual, expected)
 
 
+@pytest.mark.onnx
 def test_wavenet_onnx_export_matches_pytorch(tmp_path: Path) -> None:
     onnxruntime = pytest.importorskip("onnxruntime")
     model = _model()
