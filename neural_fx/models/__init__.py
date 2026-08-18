@@ -1,8 +1,10 @@
-from .base import BaseNeuralFXModel
+from ..config import ModelConfig
+from .base import BaseNeuralFXModel, UnsupportedExportError
 from .recurrent import NeuralfxLSTM, NeuralfxGRU, RecurrentNeuralFXModel
 
 __all__ = [
     "BaseNeuralFXModel",
+    "UnsupportedExportError",
     "NeuralfxLSTM",
     "NeuralfxGRU",
     "RecurrentNeuralFXModel",
@@ -35,7 +37,7 @@ def register_model(name: str, model_class: type[BaseNeuralFXModel]) -> None:
     MODEL_REGISTRY[name] = model_class
 
 
-def create_model_from_config(config) -> BaseNeuralFXModel:
+def create_model_from_config(config: ModelConfig) -> BaseNeuralFXModel:
     """
     Create a model instance from a ModelConfig.
 

@@ -7,6 +7,7 @@ Real-time guitar effect and amp modelling using neural networks (LSTM, GRU, Wave
 - **Model Architectures**: LSTM, GRU with configurable sizes (nano/small/medium/large/xl)
 - **Audio Processing**: 48kHz sample rate, chunked processing for memory efficiency
 - **Training**: PyTorch Lightning with TBPTT (Truncated Backpropagation Through Time) and burn-in support
+- **Live metrics**: CSV and TensorBoard logs written to the same training run directory
 - **Conditioning**: Support for gain knob and other control parameters
 - **Export**: ONNX, TorchScript, and RTNeural JSON formats for deployment
 - **Inference**: Real-time streaming processor for single-sample and block processing
@@ -32,7 +33,13 @@ python scripts/train.py --config configs/models/gru/gru_medium.yaml
 
 # Train with custom epochs
 python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epochs 50
+
+# Follow a run while it trains
+tensorboard --logdir lightning_logs
 ```
+
+For short experiments, pass `--log_every_n_steps 1` to update both loggers on
+every training batch. The default interval is 50 steps.
 
 ### Exporting a Trained Model
 
