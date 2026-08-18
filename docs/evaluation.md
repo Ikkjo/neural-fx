@@ -40,6 +40,10 @@ manifest:
 schema_version: "1.0"
 experiment_id: lstm-nano-seed-42
 run_kind: final  # use smoke for partial workflow-validation runs
+# Reset model state once, then retain it across sequential chunks.
+inference_chunk_size: 65536
+# Use the same post-reset burn-in for every architecture.
+burn_in_samples: 4096
 model:
   # Optional for new checkpoints that embed neural_fx_config.
   config: ../../configs/models/lstm/lstm_nano.yaml
@@ -67,24 +71,39 @@ Evaluate the checkpoint and create aligned input, target, and prediction WAVs:
 ```bash
 python scripts/evaluate_experiment.py \
   --manifest experiments/lstm-nano-seed-42.yaml \
-  --output-dir results/lstm-nano-seed-42
+  --output-dir results/lstm-nano-seed-42 \
+  --chunk-size 65536
 ```
 
-Combine experiment result files into JSON and Markdown reports. Models whose
-measured parameter counts are within the requested ratio are placed in the same
-size-matched group.
+Evaluation resets model state once and carries it between chunks. ESR, MSE, and
+correlation cover the complete post-burn segment. MR-STFT is the mean from up to
+ten fixed, uniformly placed, non-overlapping three-second windows; the result
+records every window start and value.
+
+Combine the three seed results for every architecture with three fresh benchmark
+processes per representative checkpoint. The architecture report retains all raw
+seed values and reports mean, sample standard deviation, median, minimum, and
+maximum. The median-ESR seed supplies the listening samples and benchmark target.
 
 ```bash
 python scripts/compare_evaluations.py results/*/evaluation.json \
+  --benchmarks benchmarks/*.json \
   --output-dir results/comparison \
-  --size-tolerance 1.35
+  --size-tolerance 1.01
 ```
 
-The report labels any comparison containing a smoke run as workflow validation.
-Only complete, controlled runs should use `run_kind: final`.
+`comparison.json` and `comparison.md` contain the architecture aggregation and
+the preregistered conclusion-rule output. `seed-comparison.json` and
+`seed-comparison.md` retain the per-run view. Missing seeds or benchmarks produce
+an explicit incomplete conclusion. A complete result that fails any quality rule
+states `no clear quality winner under this budget`.
+
+Only complete, controlled runs should use `run_kind: final`. Smoke runs validate
+the workflow but do not support a final model ranking.
 
 Evaluation uses the same paired normalization and latency-compensation behavior as
-training. By default, quality metrics exclude `loss.mask_first` samples and use the
-configured ESR pre-emphasis setting; listening files retain the full aligned segment.
-Set `dataset.metric_mask_first` in every manifest when models have different
-training masks but must be compared over one identical metric window.
+training. By default, quality metrics exclude `burn_in_samples`, then
+`dataset.metric_mask_first`, then `loss.mask_first` in that precedence order, and
+use the configured ESR pre-emphasis setting. Listening files retain the full
+aligned segment. Set `burn_in_samples` in every manifest when models must be
+compared over one identical metric window.

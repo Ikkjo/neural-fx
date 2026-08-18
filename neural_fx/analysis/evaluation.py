@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,16 @@ from .benchmarking import load_benchmark_result, load_model_for_evaluation
 
 EVALUATION_SCHEMA_VERSION = "1.0"
 COMPARISON_SCHEMA_VERSION = "1.0"
+ARCHITECTURE_REPORT_SCHEMA_VERSION = "1.0"
+DEFAULT_INFERENCE_CHUNK_SIZE = 65_536
+REQUIRED_FINAL_SEEDS = (17, 42, 137)
+REQUIRED_ARCHITECTURES = ("lstm", "gru", "wavenet", "s4")
+QUALITY_METRICS = (
+    "esr",
+    "mse",
+    "correlation",
+    "multi_resolution_stft_distance",
+)
 
 
 def _resolve_path(value: str, manifest_path: Path) -> Path:
@@ -109,10 +121,49 @@ def _safe_correlation(prediction: torch.Tensor, target: torch.Tensor) -> float:
     return float(np.corrcoef(pred_np, target_np)[0, 1])
 
 
+def run_chunked_inference(
+    model: torch.nn.Module,
+    audio: torch.Tensor,
+    chunk_size: int = DEFAULT_INFERENCE_CHUNK_SIZE,
+) -> torch.Tensor:
+    """Run stateful inference, resetting once and carrying state across chunks."""
+    if chunk_size <= 0:
+        raise ValueError("inference chunk size must be positive")
+    model.reset_state()
+    chunks = []
+    with torch.inference_mode():
+        for start in range(0, audio.shape[-1], chunk_size):
+            chunks.append(model(audio[..., start : start + chunk_size]))
+    if not chunks:
+        raise ValueError("evaluation audio must contain at least one sample")
+    return torch.cat(chunks, dim=-1)
+
+
+def _stft_window_starts(
+    num_samples: int,
+    sample_rate: int,
+    window_seconds: float = 3.0,
+    max_windows: int = 10,
+) -> tuple[list[int], int]:
+    """Select fixed, uniformly spaced, non-overlapping STFT windows."""
+    window_samples = min(num_samples, round(window_seconds * sample_rate))
+    window_count = min(max_windows, max(1, num_samples // window_samples))
+    if window_count == 1:
+        return [0], window_samples
+    starts = np.linspace(
+        0,
+        num_samples - window_samples,
+        num=window_count,
+        dtype=np.int64,
+    ).tolist()
+    return [int(start) for start in starts], window_samples
+
+
 def evaluate_experiment(
     manifest: dict[str, Any],
     output_dir: str | Path,
     device: str | torch.device = "cpu",
+    inference_chunk_size: int | None = None,
 ) -> dict[str, Any]:
     """Evaluate one checkpoint and write aligned listening samples."""
     output_dir = Path(output_dir)
@@ -126,9 +177,12 @@ def evaluate_experiment(
     )
 
     input_batch = input_audio.unsqueeze(0).to(device)
-    with torch.inference_mode():
-        model.reset_state()
-        prediction = model(input_batch).detach().cpu()
+    chunk_size = int(
+        inference_chunk_size
+        if inference_chunk_size is not None
+        else manifest.get("inference_chunk_size", DEFAULT_INFERENCE_CHUNK_SIZE)
+    )
+    prediction = run_chunked_inference(model, input_batch, chunk_size).detach().cpu()
     target_batch = target_audio.unsqueeze(0)
     input_batch = input_batch.cpu()
     common_length = min(
@@ -141,7 +195,10 @@ def evaluate_experiment(
         raise ValueError("Evaluation segment must contain at least 2048 samples")
 
     mask_first = int(
-        manifest["dataset"].get("metric_mask_first", config.loss.mask_first)
+        manifest.get(
+            "burn_in_samples",
+            manifest["dataset"].get("metric_mask_first", config.loss.mask_first),
+        )
     )
     if mask_first < 0 or mask_first >= common_length:
         raise ValueError(
@@ -157,9 +214,18 @@ def evaluate_experiment(
         if pre_emphasis is not None and pre_emphasis.enabled
         else None
     )
-    stft_distance = MultiResolutionSTFTLoss()(
-        metric_prediction, metric_target
-    ).item()
+    stft_starts, stft_window_samples = _stft_window_starts(
+        metric_prediction.shape[-1], config.sample_rate
+    )
+    stft_loss = MultiResolutionSTFTLoss()
+    stft_values = [
+        stft_loss(
+            metric_prediction[..., start : start + stft_window_samples],
+            metric_target[..., start : start + stft_window_samples],
+        ).item()
+        for start in stft_starts
+    ]
+    stft_distance = statistics.fmean(stft_values)
     metrics = {
         "esr": ESR(
             metric_prediction,
@@ -223,12 +289,20 @@ def evaluate_experiment(
             "trainable_parameters": trainable_parameters,
         },
         "training": manifest["training"],
+        "inference": {
+            "chunk_size": chunk_size,
+            "chunks": math.ceil(common_length / chunk_size),
+            "state_reset_count": 1,
+        },
         "dataset": {
             **manifest["dataset"],
             "evaluated_samples": common_length,
             "mask_first": mask_first,
             "configured_loss_mask_first": config.loss.mask_first,
             "metric_samples": metric_prediction.shape[-1],
+            "stft_window_starts": stft_starts,
+            "stft_window_samples": stft_window_samples,
+            "stft_window_values": stft_values,
             "sample_rate": config.sample_rate,
         },
         "metrics": metrics,
@@ -284,6 +358,507 @@ def _size_matched_groups(
         }
         for index, group in enumerate(groups)
     ]
+
+
+def _numeric_summary(values_by_key: dict[str, float]) -> dict[str, Any]:
+    """Summarize raw values without hiding any individual observation."""
+    values = list(values_by_key.values())
+    return {
+        "mean": statistics.fmean(values),
+        "standard_deviation": statistics.stdev(values) if len(values) > 1 else 0.0,
+        "median": statistics.median(values),
+        "minimum": min(values),
+        "maximum": max(values),
+        "raw": values_by_key,
+    }
+
+
+def _aggregate_benchmarks(
+    benchmark_results: list[dict[str, Any]],
+    representative_checkpoint: str | None,
+) -> dict[str, Any]:
+    """Aggregate fresh benchmark processes by device."""
+    by_device: dict[str, list[dict[str, Any]]] = {}
+    for result in benchmark_results:
+        device = str(result["runtime"]["device"]).split(":", maxsplit=1)[0]
+        by_device.setdefault(device, []).append(result)
+
+    devices = {}
+    for device, runs in sorted(by_device.items()):
+        checkpoints_match = representative_checkpoint is not None and all(
+            result["model"].get("checkpoint_path") == representative_checkpoint
+            for result in runs
+        )
+        block_size_sets = [
+            {block["block_size"] for block in result["blocks"]} for result in runs
+        ]
+        block_recipe_matches = bool(block_size_sets) and all(
+            sizes == block_size_sets[0] for sizes in block_size_sets
+        )
+        blocks = {}
+        block_sizes = sorted(set.intersection(*block_size_sets)) if block_size_sets else []
+        for block_size in block_sizes:
+            matching = [
+                next(
+                    block
+                    for block in result["blocks"]
+                    if block["block_size"] == block_size
+                )
+                for result in runs
+            ]
+            timing = {
+                output_key: _numeric_summary(
+                    {
+                        str(index + 1): float(block[input_key])
+                        for index, block in enumerate(matching)
+                    }
+                )
+                for output_key, input_key in (
+                    ("p50_ms", "median_ms"),
+                    ("p95_ms", "p95_ms"),
+                    ("max_ms", "max_ms"),
+                )
+                if all(input_key in block for block in matching)
+            }
+            deadline_misses = {
+                str(index + 1): float(block["deadline_misses"])
+                for index, block in enumerate(matching)
+            }
+            deadline_headroom = {
+                str(index + 1): float(block["deadline_ms"] - block["p95_ms"])
+                for index, block in enumerate(matching)
+            }
+            blocks[str(block_size)] = {
+                **timing,
+                "deadline_ms": matching[0]["deadline_ms"],
+                "deadline_misses": _numeric_summary(deadline_misses),
+                "deadline_headroom_ms": _numeric_summary(deadline_headroom),
+                "real_time_capable": all(
+                    block["deadline_misses"] == 0
+                    and block["p95_ms"] <= 0.8 * block["deadline_ms"]
+                    for block in matching
+                ),
+            }
+        memory = {}
+        for key in (
+            "process_peak_rss_bytes",
+            "cuda_peak_allocated_bytes",
+            "cuda_peak_reserved_bytes",
+        ):
+            values = {
+                str(index + 1): float(result["memory"][key])
+                for index, result in enumerate(runs)
+                if key in result["memory"]
+            }
+            if values:
+                memory[key] = _numeric_summary(values)
+        offline = {
+            key: _numeric_summary(
+                {
+                    str(index + 1): float(result["offline"][key])
+                    for index, result in enumerate(runs)
+                }
+            )
+            for key in ("median_ms", "p95_ms", "max_ms", "real_time_factor")
+            if all(key in result["offline"] for result in runs)
+        }
+        model_resources = {
+            key: _numeric_summary(
+                {
+                    str(index + 1): float(result["model"][key])
+                    for index, result in enumerate(runs)
+                }
+            )
+            for key in ("checkpoint_size_bytes", "trainable_parameters")
+            if all(result["model"].get(key) is not None for result in runs)
+        }
+        if all("model_state_bytes" in result["memory"] for result in runs):
+            model_resources["model_state_bytes"] = _numeric_summary(
+                {
+                    str(index + 1): float(result["memory"]["model_state_bytes"])
+                    for index, result in enumerate(runs)
+                }
+            )
+        devices[device] = {
+            "status": (
+                "complete"
+                if len(runs) == 3 and checkpoints_match and block_recipe_matches
+                else "incomplete"
+            ),
+            "run_count": len(runs),
+            "representative_checkpoint_matches": checkpoints_match,
+            "block_recipe_matches": block_recipe_matches,
+            "result_paths": [result.get("_result_path") for result in runs],
+            "offline": offline,
+            "offline_real_time_factor": offline["real_time_factor"],
+            "blocks": blocks,
+            "model_resources": model_resources,
+            "memory": memory,
+        }
+    return devices
+
+
+def _quality_conclusion(
+    architectures: list[dict[str, Any]], *, size_matched: bool
+) -> dict[str, Any]:
+    complete = [item for item in architectures if item["status"] == "complete"]
+    if (
+        len(complete) != len(architectures)
+        or len(complete) < 2
+        or not size_matched
+    ):
+        return {
+            "status": "incomplete",
+            "winner": None,
+            "statement": (
+                "architecture comparison is incomplete; no quality conclusion is allowed"
+            ),
+            "conditions": {},
+        }
+
+    ordered = sorted(complete, key=lambda item: item["metrics"]["esr"]["median"])
+    candidate, next_best = ordered[:2]
+    candidate_esr = candidate["metrics"]["esr"]
+    next_esr = next_best["metrics"]["esr"]
+    median_gap = next_esr["median"] - candidate_esr["median"]
+    matched_seed_lower = all(
+        candidate_esr["raw"][seed] < next_esr["raw"][seed]
+        for seed in candidate_esr["raw"]
+    )
+    conditions = {
+        "median_esr_at_least_5_percent_lower": (
+            median_gap / next_esr["median"] >= 0.05
+        ),
+        "esr_lower_for_all_matched_seeds": matched_seed_lower,
+        "esr_standard_deviation_smaller_than_median_gap": (
+            candidate_esr["standard_deviation"] < median_gap
+        ),
+        "median_mse_regression_at_most_5_percent": (
+            candidate["metrics"]["mse"]["median"]
+            <= next_best["metrics"]["mse"]["median"] * 1.05
+        ),
+        "median_mr_stft_regression_at_most_5_percent": (
+            candidate["metrics"]["multi_resolution_stft_distance"]["median"]
+            <= next_best["metrics"]["multi_resolution_stft_distance"]["median"]
+            * 1.05
+        ),
+        "median_correlation_not_lower_by_more_than_0_01": (
+            candidate["metrics"]["correlation"]["median"]
+            >= next_best["metrics"]["correlation"]["median"] - 0.01
+        ),
+    }
+    winner = candidate["architecture"] if all(conditions.values()) else None
+    return {
+        "status": "complete",
+        "candidate": candidate["architecture"],
+        "next_best": next_best["architecture"],
+        "winner": winner,
+        "statement": (
+            f"{winner} is the clear quality winner under this budget"
+            if winner is not None
+            else "no clear quality winner under this budget"
+        ),
+        "median_esr_gap": median_gap,
+        "conditions": conditions,
+    }
+
+
+def _performance_conclusion(
+    architectures: list[dict[str, Any]], quality_winner: str | None
+) -> dict[str, Any]:
+    cpu_ready = [
+        item
+        for item in architectures
+        if item.get("benchmarks", {}).get("cpu", {}).get("status") == "complete"
+        and "128" in item["benchmarks"]["cpu"]["blocks"]
+    ]
+    if len(cpu_ready) != len(architectures) or len(cpu_ready) < 2:
+        return {
+            "status": "incomplete",
+            "material_differences": {},
+            "pareto_winner": None,
+            "statement": "performance comparison is incomplete",
+        }
+
+    def material(metric_getter: Any) -> dict[str, Any]:
+        ordered = sorted(cpu_ready, key=lambda item: metric_getter(item)["median"])
+        fastest, next_fastest = ordered[:2]
+        fastest_values = metric_getter(fastest)
+        next_values = metric_getter(next_fastest)
+        improvement = (
+            next_values["median"] - fastest_values["median"]
+        ) / next_values["median"]
+        is_material = (
+            improvement >= 0.10
+            and fastest_values["maximum"] < next_values["minimum"]
+        )
+        return {
+            "winner": fastest["architecture"] if is_material else None,
+            "candidate": fastest["architecture"],
+            "next_best": next_fastest["architecture"],
+            "relative_improvement": improvement,
+            "ranges_do_not_overlap": (
+                fastest_values["maximum"] < next_values["minimum"]
+            ),
+            "material": is_material,
+        }
+
+    material_differences = {
+        "cpu_128_sample_p95": material(
+            lambda item: item["benchmarks"]["cpu"]["blocks"]["128"]["p95_ms"]
+        ),
+        "cpu_offline_real_time_factor": material(
+            lambda item: item["benchmarks"]["cpu"]["offline_real_time_factor"]
+        ),
+    }
+
+    pareto_winner = None
+    if quality_winner is not None:
+        candidate = next(
+            item for item in architectures if item["architecture"] == quality_winner
+        )
+        candidate_cpu = candidate["benchmarks"]["cpu"]
+        candidate_values = (
+            candidate["parameters"],
+            candidate_cpu["blocks"]["128"]["p95_ms"]["median"],
+            candidate_cpu["offline_real_time_factor"]["median"],
+            candidate_cpu["memory"]["process_peak_rss_bytes"]["median"],
+        )
+        if all(
+            all(left <= right for left, right in zip(candidate_values, other_values))
+            for other in architectures
+            if other["architecture"] != quality_winner
+            for other_values in [
+                (
+                    other["parameters"],
+                    other["benchmarks"]["cpu"]["blocks"]["128"]["p95_ms"][
+                        "median"
+                    ],
+                    other["benchmarks"]["cpu"]["offline_real_time_factor"][
+                        "median"
+                    ],
+                    other["benchmarks"]["cpu"]["memory"][
+                        "process_peak_rss_bytes"
+                    ]["median"],
+                )
+            ]
+        ):
+            pareto_winner = quality_winner
+    return {
+        "status": "complete",
+        "material_differences": material_differences,
+        "pareto_winner": pareto_winner,
+        "statement": (
+            f"{pareto_winner} is Pareto-dominant under the preregistered rule"
+            if pareto_winner is not None
+            else "no Pareto-dominant model under the preregistered rule"
+        ),
+    }
+
+
+def build_architecture_report(
+    results: list[dict[str, Any]],
+    benchmark_results: list[dict[str, Any]] | None = None,
+    *,
+    size_tolerance: float = 1.01,
+    required_seeds: tuple[int, ...] = REQUIRED_FINAL_SEEDS,
+    required_architectures: tuple[str, ...] = REQUIRED_ARCHITECTURES,
+) -> tuple[dict[str, Any], str]:
+    """Aggregate final seeds and apply the preregistered conclusion rules."""
+    benchmark_results = benchmark_results or []
+    by_architecture: dict[str, list[dict[str, Any]]] = {}
+    for result in results:
+        by_architecture.setdefault(result["model"]["type"], []).append(result)
+    benchmarks_by_architecture: dict[str, list[dict[str, Any]]] = {}
+    for result in benchmark_results:
+        benchmarks_by_architecture.setdefault(result["model"]["type"], []).append(
+            result
+        )
+
+    architectures = []
+    required_seed_set = set(required_seeds)
+    for architecture in required_architectures:
+        runs = by_architecture.get(architecture, [])
+        seed_runs = {int(run["training"]["seed"]): run for run in runs}
+        seeds = set(seed_runs)
+        finite = all(
+            math.isfinite(float(run["metrics"][metric]))
+            for run in runs
+            for metric in QUALITY_METRICS
+        )
+        parameter_counts = {run["model"]["trainable_parameters"] for run in runs}
+        complete = (
+            seeds == required_seed_set
+            and len(runs) == len(required_seeds)
+            and len(parameter_counts) == 1
+            and finite
+            and all(run["run_kind"] == "final" for run in runs)
+        )
+        incomplete_reasons = []
+        if seeds != required_seed_set or len(runs) != len(required_seeds):
+            incomplete_reasons.append("required_seed_set_not_complete")
+        if len(parameter_counts) != 1:
+            incomplete_reasons.append("parameter_count_not_consistent")
+        if not finite:
+            incomplete_reasons.append("quality_metric_not_finite")
+        if any(run["run_kind"] != "final" for run in runs):
+            incomplete_reasons.append("non_final_run_present")
+        metrics = {
+            metric: _numeric_summary(
+                {
+                    str(seed): float(seed_runs[seed]["metrics"][metric])
+                    for seed in sorted(seed_runs)
+                }
+            )
+            for metric in QUALITY_METRICS
+        } if runs else {}
+        representative = None
+        representative_checkpoint = None
+        if complete:
+            representative_run = sorted(
+                runs, key=lambda run: run["metrics"]["esr"]
+            )[len(runs) // 2]
+            representative_checkpoint = representative_run["sources"]["checkpoint"]
+            representative = {
+                "seed": int(representative_run["training"]["seed"]),
+                "experiment_id": representative_run["experiment_id"],
+                "selection_rule": "median_esr_seed",
+                "sources": representative_run["sources"],
+                "listening_samples": representative_run.get("artifacts", {}),
+            }
+        architectures.append(
+            {
+                "architecture": architecture,
+                "status": "complete" if complete else "incomplete",
+                "incomplete_reasons": incomplete_reasons,
+                "seeds": sorted(seeds),
+                "missing_seeds": sorted(required_seed_set - seeds),
+                "parameters": next(iter(parameter_counts))
+                if len(parameter_counts) == 1
+                else None,
+                "metrics": metrics,
+                "runs": [
+                    {
+                        "seed": int(run["training"]["seed"]),
+                        "experiment_id": run["experiment_id"],
+                        "metrics": run["metrics"],
+                        "training": run["training"],
+                        "sources": run["sources"],
+                        "artifacts": run.get("artifacts", {}),
+                    }
+                    for run in sorted(
+                        runs, key=lambda run: int(run["training"]["seed"])
+                    )
+                ],
+                "representative": representative,
+                "benchmarks": _aggregate_benchmarks(
+                    benchmarks_by_architecture.get(architecture, []),
+                    representative_checkpoint,
+                ),
+            }
+        )
+
+    size_inputs = [
+        {
+            "experiment_id": item["architecture"],
+            "model": {"trainable_parameters": item["parameters"]},
+        }
+        for item in architectures
+        if item["parameters"] is not None
+    ]
+    size_groups = _size_matched_groups(size_inputs, size_tolerance) if size_inputs else []
+    all_architectures_size_matched = (
+        len(size_groups) == 1
+        and len(size_groups[0]["experiments"]) == len(required_architectures)
+    )
+    quality = _quality_conclusion(
+        architectures,
+        size_matched=all_architectures_size_matched,
+    )
+    performance = _performance_conclusion(architectures, quality.get("winner"))
+    report = {
+        "schema_version": ARCHITECTURE_REPORT_SCHEMA_VERSION,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "decision_rule": "issue-15-v1-preregistered",
+        "required_seeds": list(required_seeds),
+        "required_architectures": list(required_architectures),
+        "size_tolerance_ratio": size_tolerance,
+        "size_groups": size_groups,
+        "all_architectures_size_matched": all_architectures_size_matched,
+        "rules": {
+            "quality": {
+                "median_esr_relative_improvement": 0.05,
+                "requires_lower_esr_for_all_matched_seeds": True,
+                "requires_esr_standard_deviation_below_median_gap": True,
+                "maximum_median_mse_regression": 0.05,
+                "maximum_median_mr_stft_regression": 0.05,
+                "maximum_median_correlation_regression": 0.01,
+            },
+            "performance": {
+                "minimum_median_relative_improvement": 0.10,
+                "requires_non_overlapping_ranges": True,
+                "real_time_p95_deadline_fraction": 0.80,
+            },
+            "pareto": {
+                "requires_quality_winner": True,
+                "dimensions": [
+                    "parameters",
+                    "cpu_128_sample_p95",
+                    "cpu_offline_real_time_factor",
+                    "cpu_peak_rss",
+                ],
+            },
+        },
+        "architectures": architectures,
+        "conclusion": {
+            "quality": quality,
+            "performance": performance,
+        },
+    }
+
+    lines = [
+        "# Architecture-level model comparison",
+        "",
+        f"> {quality['statement']}.",
+        "",
+        "| Architecture | Seeds | Parameters | ESR median | ESR std | MSE median | MR-STFT median | Correlation median | Representative |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for item in architectures:
+        if item["status"] == "complete":
+            representative = item["representative"]
+            lines.append(
+                "| {architecture} | {seeds} | {parameters:,} | {esr:.6f} | "
+                "{esr_std:.6f} | {mse:.6f} | {stft:.6f} | {correlation:.4f} | "
+                "seed {representative_seed} ({experiment_id}) |".format(
+                    architecture=item["architecture"],
+                    seeds=", ".join(str(seed) for seed in item["seeds"]),
+                    parameters=item["parameters"],
+                    esr=item["metrics"]["esr"]["median"],
+                    esr_std=item["metrics"]["esr"]["standard_deviation"],
+                    mse=item["metrics"]["mse"]["median"],
+                    stft=item["metrics"]["multi_resolution_stft_distance"]["median"],
+                    correlation=item["metrics"]["correlation"]["median"],
+                    representative_seed=representative["seed"],
+                    experiment_id=representative["experiment_id"],
+                )
+            )
+        else:
+            lines.append(
+                f"| {item['architecture']} | {', '.join(map(str, item['seeds'])) or '—'} "
+                f"| {item['parameters'] or '—'} | — | — | — | — | — | incomplete |"
+            )
+    lines.extend(
+        [
+            "",
+            "## Preregistered conclusions",
+            "",
+            f"- Quality: {quality['statement']}.",
+            f"- Performance: {performance['statement']}.",
+            "- Listening representatives are the median-ESR seed for each architecture; listening cannot override the metric conclusion.",
+        ]
+    )
+    return report, "\n".join(lines) + "\n"
 
 
 def build_comparison_report(
