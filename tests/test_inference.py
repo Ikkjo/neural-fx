@@ -121,6 +121,25 @@ class TestStreamingInference:
         # Outputs should be different tensors
         assert out1 is not out2
 
+    def test_streaming_processor_accepts_conditioning(self):
+        """Block and sample streaming expose model conditioning controls."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, conditioning_size=1),
+            input_size=1,
+            output_size=1,
+        )
+        processor = StreamingProcessor(NeuralfxLSTM(config).eval())
+
+        block = processor.process_block(
+            torch.randn(1, 1, 8), conditioning=torch.tensor([[0.5]])
+        )
+        processor.reset()
+        sample = processor.process_sample(0.1, conditioning=0.5)
+
+        assert block.shape == (1, 1, 8)
+        assert isinstance(sample, float)
+
     def test_load_audio(self, temp_audio_file):
         """Test loading audio from file."""
         audio_path, sample_rate = temp_audio_file

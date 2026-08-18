@@ -28,22 +28,35 @@ class _RecurrentExportWrapper(nn.Module):
         identity = x
 
         if self.conv1d is not None:
-            x = self.conv1d(x)
+            kernel_size = self.conv1d[0].kernel_size[0]
+            x = self.conv1d(F.pad(x, (kernel_size - 1, 0)))
 
         if self.conditioning_size > 0:
             if conditioning is None:
                 raise ValueError("Conditioning input is required for this exported model")
-            if conditioning.ndim == 2:
-                conditioning = conditioning.unsqueeze(2).expand(-1, -1, x.shape[2])
-            elif conditioning.shape[2] != x.shape[2]:
-                conditioning = F.interpolate(conditioning, size=x.shape[2])
+            if conditioning.ndim != 2:
+                raise ValueError(
+                    "Exported conditioning must have shape [batch, channels]"
+                )
+            conditioning = conditioning.unsqueeze(2).expand(-1, -1, x.shape[2])
             x = torch.cat([x, conditioning], dim=1)
 
         x, _ = self.rnn(x.transpose(1, 2), None)
         x = self.fc_out(x).transpose(1, 2)
 
         if self.conv_transpose is not None:
-            x = self.conv_transpose(x)
+            x = F.conv_transpose1d(
+                x,
+                self.conv_transpose.weight,
+                bias=None,
+                stride=self.conv_transpose.stride,
+            )
+            # Padding by stride - 1 makes the crop valid for every input
+            # length, including lengths that are not divisible by the stride.
+            x = F.pad(x, (0, self.conv_transpose.stride[0] - 1))
+            x = x[..., : identity.shape[-1]]
+            if self.conv_transpose.bias is not None:
+                x = x + self.conv_transpose.bias.view(1, -1, 1)
 
         if self.skip_connection:
             skip = (
@@ -72,6 +85,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         # Optional Input Convolution (Feature Extraction / Downsampling)
         self.conv1d = None
         self.conv_transpose = None
+        self.skip_projection = None
         rnn_input_size = config.input_size
 
         if self.params.conv1d:
@@ -81,23 +95,11 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                     out_channels=self.params.conv1d.filters,
                     kernel_size=self.params.conv1d.kernel_size,
                     stride=self.params.conv1d.stride,
-                    padding=(self.params.conv1d.kernel_size - 1) // 2,
+                    padding=0,
                 ),
                 nn.ELU(),
             )
             rnn_input_size = self.params.conv1d.filters
-
-            # projection layer to ensure shape matches if needed
-            self.skip_projection = None
-            if self.params.skip_connection:
-                needs_projection = (
-                    self.params.conv1d.stride > 1
-                    or config.input_size != config.output_size
-                )
-                if needs_projection:
-                    self.skip_projection = nn.Conv1d(
-                        config.input_size, config.output_size, 1
-                    )
 
             # Upsampling if stride > 1
             if self.params.conv1d.stride > 1:
@@ -106,9 +108,11 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                     out_channels=config.output_size,
                     kernel_size=self.params.conv1d.kernel_size,
                     stride=self.params.conv1d.stride,
-                    padding=(self.params.conv1d.kernel_size - 1) // 2,
-                    output_padding=self.params.conv1d.stride - 1,  # Ensure length match
+                    padding=0,
                 )
+
+        if self.params.skip_connection and config.input_size != config.output_size:
+            self.skip_projection = nn.Conv1d(config.input_size, config.output_size, 1)
 
         # Add conditioning channels to RNN input
         rnn_input_size += self.params.conditioning_size
@@ -122,6 +126,13 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         # Hidden State
         self.hidden_state = None
+        self._conv_input_buffer: Tensor | None = None
+        self._conv_stride_phase = 0
+        self._upsample_overlap: Tensor | None = None
+
+        # Apply the model-specific recurrent bias initialization after all
+        # recurrent parameters have been created.
+        self.reset_parameters()
 
     def _build_rnn(self, input_size: int) -> nn.Module:
         raise NotImplementedError
@@ -138,28 +149,34 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         if reset_state:
             self.reset_state()
-        if detach_state and self.hidden_state is not None:
+        if detach_state:
             self.detach_state()
 
+        feature_offset = 0
+        feature_stride = 1
+        input_length = x.shape[-1]
         if self.conv1d:
-            x = self.conv1d(x)
+            x, feature_offset = self._process_input_conv(x)
+            feature_stride = self.conv1d[0].stride[0]
 
         # Handle Conditioning
         if self.params.conditioning_size > 0:
             if conditioning is None:
                 # Default to zeros if not provided
-                conditioning = torch.zeros(
-                    x.shape[0], self.params.conditioning_size, device=x.device
-                )
+                conditioning = x.new_zeros(x.shape[0], self.params.conditioning_size)
 
             # conditioning: [Batch, C_cond] or [Batch, C_cond, Time]
             if conditioning.ndim == 2:
                 # Expand to time: [Batch, C_cond, 1] -> [Batch, C_cond, Time]
                 cond = conditioning.unsqueeze(2).expand(-1, -1, x.shape[2])
             elif conditioning.ndim == 3:
-                cond = conditioning
-                if cond.shape[2] != x.shape[2]:
-                    cond = F.interpolate(cond, size=x.shape[2])
+                if conditioning.shape[2] == input_length:
+                    cond = conditioning[..., feature_offset::feature_stride]
+                    cond = cond[..., : x.shape[2]]
+                elif conditioning.shape[2] == x.shape[2]:
+                    cond = conditioning
+                else:
+                    cond = F.interpolate(conditioning, size=x.shape[2], mode="nearest")
             else:
                 raise ValueError(f"Invalid conditioning shape: {conditioning.shape}")
 
@@ -170,22 +187,24 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
             x = torch.cat([x, cond], dim=1)
 
-        # Transpose for RNN: [Batch, Time, Channels]
-        x = x.transpose(1, 2)
+        if x.shape[-1] > 0:
+            # Transpose for RNN: [Batch, Time, Channels]
+            x = x.transpose(1, 2)
 
-        # Run RNN
-        x, new_state = self.rnn(x, self.hidden_state)
-        self.hidden_state = new_state
+            # Run RNN
+            x, new_state = self.rnn(x, self.hidden_state)
+            self.hidden_state = new_state
 
-        # FC
-        x = self.fc_out(x)
-
-        # Back to [Batch, Channels, Time]
-        x = x.transpose(1, 2)
+            # FC and back to [Batch, Channels, Time]
+            x = self.fc_out(x).transpose(1, 2)
+        else:
+            x = identity.new_empty(
+                identity.shape[0], self.config.output_size, 0
+            )
 
         # Upsample if needed
         if self.conv_transpose:
-            x = self.conv_transpose(x)
+            x = self._process_output_conv(x, input_length, feature_offset)
 
         # Skip Connection
         if self.params.skip_connection:
@@ -195,18 +214,81 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         return x
 
+    def _process_input_conv(self, x: Tensor) -> tuple[Tensor, int]:
+        """Run causal strided convolution while preserving stream phase."""
+        conv = self.conv1d[0]
+        memory = conv.kernel_size[0] - 1
+
+        if self._conv_input_buffer is None:
+            self._conv_input_buffer = x.new_zeros(x.shape[0], x.shape[1], memory)
+
+        combined = torch.cat([self._conv_input_buffer, x], dim=-1)
+        feature_offset = (-self._conv_stride_phase) % conv.stride[0]
+        conv_input = combined[..., feature_offset:]
+
+        if conv_input.shape[-1] >= conv.kernel_size[0]:
+            features = self.conv1d(conv_input)
+        else:
+            features = x.new_empty(x.shape[0], conv.out_channels, 0)
+
+        if memory > 0:
+            self._conv_input_buffer = combined[..., -memory:]
+        self._conv_stride_phase = (
+            self._conv_stride_phase + x.shape[-1]
+        ) % conv.stride[0]
+        return features, feature_offset
+
+    def _process_output_conv(
+        self, x: Tensor, output_length: int, feature_offset: int
+    ) -> Tensor:
+        """Synthesize one output per input sample with overlap carried forward."""
+        kernel_size = self.conv_transpose.kernel_size[0]
+        overlap_length = kernel_size - 1
+        output = x.new_zeros(
+            x.shape[0], self.config.output_size, output_length + overlap_length
+        )
+
+        if self._upsample_overlap is not None:
+            output[..., :overlap_length] += self._upsample_overlap
+
+        if x.shape[-1] > 0:
+            synthesized = F.conv_transpose1d(
+                x,
+                self.conv_transpose.weight,
+                bias=None,
+                stride=self.conv_transpose.stride,
+            )
+            end = feature_offset + synthesized.shape[-1]
+            output[..., feature_offset:end] += synthesized
+
+        current = output[..., :output_length]
+        if self.conv_transpose.bias is not None:
+            current = current + self.conv_transpose.bias.view(1, -1, 1)
+
+        if overlap_length > 0:
+            self._upsample_overlap = output[..., output_length:]
+        return current
+
     def reset_state(self) -> None:
         self.hidden_state = None
+        self._conv_input_buffer = None
+        self._conv_stride_phase = 0
+        self._upsample_overlap = None
 
     def detach_state(self) -> None:
-        if self.hidden_state is None:
-            return
-        if isinstance(self.hidden_state, tuple):
-            self.hidden_state = tuple(h.detach() for h in self.hidden_state)
-        else:
-            self.hidden_state = self.hidden_state.detach()
+        if self.hidden_state is not None:
+            if isinstance(self.hidden_state, tuple):
+                self.hidden_state = tuple(h.detach() for h in self.hidden_state)
+            else:
+                self.hidden_state = self.hidden_state.detach()
+        if self._conv_input_buffer is not None:
+            self._conv_input_buffer = self._conv_input_buffer.detach()
+        if self._upsample_overlap is not None:
+            self._upsample_overlap = self._upsample_overlap.detach()
 
-    def process_sample(self, x: Tensor, reset=False) -> Tensor:
+    def process_sample(
+        self, x: Tensor, conditioning: Tensor | None = None, reset=False
+    ) -> Tensor:
         # x: [Channels] or [Channels, 1]
         if reset:
             self.reset_state()
@@ -217,7 +299,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             x = x.unsqueeze(2)  # [B, C, 1]
 
         with torch.no_grad():
-            out = self.forward(x)
+            out = self.forward(x, conditioning=conditioning)
 
         return out.squeeze()
 
@@ -282,52 +364,24 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         self.eval()
 
-        # Create a stateless wrapper for export
-        class TorchScriptWrapper(torch.nn.Module):
-            def __init__(self, model: "RecurrentNeuralFXModel"):
-                super().__init__()
-                self.conv1d = model.conv1d
-                self.conv_transpose = model.conv_transpose
-                self.rnn = model.rnn
-                self.fc_out = model.fc_out
-                self.skip_projection = getattr(model, "skip_projection", None)
-                self.params = model.params
-                self.config = model.config
-
-            def forward(self, x: Tensor) -> Tensor:
-                identity = x
-
-                if self.conv1d is not None:
-                    x = self.conv1d(x)
-
-                x = x.transpose(1, 2)
-                x, _ = self.rnn(x, None)  # stateless - always pass None
-                x = self.fc_out(x)
-                x = x.transpose(1, 2)
-
-                if self.conv_transpose is not None:
-                    x = self.conv_transpose(x)
-
-                if self.params.skip_connection:
-                    skip = (
-                        self.skip_projection(identity)
-                        if self.skip_projection
-                        else identity
-                    )
-                    if x.shape == skip.shape:
-                        x = x + skip
-
-                return x
-
-        wrapper = TorchScriptWrapper(self)
+        wrapper = _RecurrentExportWrapper(self).eval()
 
         # Use tracing for stateless export
         dummy_input = torch.randn(1, self.config.input_size, 512)
-        scripted = torch.jit.trace(wrapper, dummy_input)
+        if self.params.conditioning_size > 0:
+            dummy_cond = torch.randn(1, self.params.conditioning_size)
+            scripted = torch.jit.trace(wrapper, (dummy_input, dummy_cond))
+        else:
+            scripted = torch.jit.trace(wrapper, dummy_input)
         scripted.save(str(path))
 
     def export_rtneural(self, path: str | Path) -> None:
         """Export model to RTNeural JSON format."""
+        if self.params.conditioning_size > 0:
+            raise NotImplementedError(
+                "RTNeural export does not support conditioned recurrent models"
+            )
+
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -370,6 +424,8 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             "activation": "elu" if isinstance(activation, nn.ELU) else "tanh",
             "shape": [None, None, conv.out_channels],
             "kernel_size": conv.kernel_size[0],
+            "padding": "causal",
+            "stride": conv.stride[0],
             "dilation": conv.dilation[0],
             "groups": conv.groups,
             "weights": [],

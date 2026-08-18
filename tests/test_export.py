@@ -267,3 +267,38 @@ class TestModelExport:
             # for stateful models. This test mainly checks it doesn't crash.
             ts_output = loaded(dummy_input)
             assert ts_output.shape == reference_output.shape
+
+    def test_conditioned_torchscript_export(self):
+        """TorchScript deployment keeps conditioning as an explicit input."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, conditioning_size=1),
+            input_size=1,
+            output_size=1,
+        )
+        model = NeuralfxLSTM(config).eval()
+        x = torch.randn(1, 1, 16)
+        conditioning = torch.tensor([[0.4]])
+        model.reset_state()
+        with torch.no_grad():
+            expected = model(x, conditioning=conditioning)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_path = Path(tmpdir) / "conditioned.pt"
+            model.export_torchscript(export_path)
+            actual = torch.jit.load(str(export_path))(x, conditioning)
+
+        torch.testing.assert_close(actual, expected)
+
+    def test_conditioned_rtneural_export_is_rejected(self):
+        """RTNeural does not silently emit a model with a missing control input."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, conditioning_size=1),
+            input_size=1,
+            output_size=1,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(NotImplementedError, match="does not support conditioned"):
+                NeuralfxLSTM(config).export_rtneural(Path(tmpdir) / "model.json")

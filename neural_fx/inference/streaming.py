@@ -66,6 +66,7 @@ def process_audio(
     output_path: str | Path,
     sample_rate: int | None = None,
     chunk_size: int = 8192,
+    conditioning: Tensor | None = None,
 ) -> Tensor:
     """Process audio file through model."""
     sample_rate = _resolve_model_sample_rate(model, sample_rate)
@@ -90,7 +91,13 @@ def process_audio(
             if chunk.ndim == 2:
                 chunk = chunk.unsqueeze(0)
 
-            out_chunk = model(chunk)
+            chunk_conditioning = conditioning
+            if conditioning is not None and conditioning.ndim == 3:
+                chunk_conditioning = conditioning[..., start:end]
+            if chunk_conditioning is None:
+                out_chunk = model(chunk)
+            else:
+                out_chunk = model(chunk, conditioning=chunk_conditioning)
             output_chunks.append(out_chunk)
 
     output = torch.cat(output_chunks, dim=-1)
@@ -105,6 +112,7 @@ def evaluate_model(
     target_path: str | Path,
     sample_rate: int | None = None,
     burn_in: int = 0,
+    conditioning: Tensor | None = None,
 ) -> dict[str, float]:
     """Evaluate model against target audio."""
     sample_rate = _resolve_model_sample_rate(model, sample_rate)
@@ -125,7 +133,10 @@ def evaluate_model(
         target_audio = target_audio.unsqueeze(0)
 
     with torch.no_grad():
-        pred_audio = model(input_audio)
+        if conditioning is None:
+            pred_audio = model(input_audio)
+        else:
+            pred_audio = model(input_audio, conditioning=conditioning)
 
     if burn_in > 0:
         pred_audio = pred_audio[..., burn_in:]
@@ -149,16 +160,31 @@ class StreamingProcessor:
         self.model.eval()
         self.model.reset_state()
 
-    def process_block(self, block: Tensor) -> Tensor:
+    def process_block(
+        self, block: Tensor, conditioning: Tensor | None = None
+    ) -> Tensor:
         """Process a block of samples."""
         with torch.no_grad():
-            return self.model(block)
+            if conditioning is None:
+                return self.model(block)
+            return self.model(block, conditioning=conditioning)
 
-    def process_sample(self, sample: float) -> float:
+    def process_sample(
+        self, sample: float, conditioning: Tensor | float | None = None
+    ) -> float:
         """Process a single sample (for real-time use)."""
         device = next(self.model.parameters()).device
         x = torch.tensor([[sample]], device=device)
-        output = self.model.process_sample(x)
+        if isinstance(conditioning, float):
+            conditioning = torch.tensor([[conditioning]], device=device)
+        elif conditioning is not None:
+            conditioning = conditioning.to(device)
+            if conditioning.ndim == 1:
+                conditioning = conditioning.unsqueeze(0)
+        if conditioning is None:
+            output = self.model.process_sample(x)
+        else:
+            output = self.model.process_sample(x, conditioning=conditioning)
         return float(output.item())
 
     def reset(self) -> None:
