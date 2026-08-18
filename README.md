@@ -4,7 +4,7 @@ Real-time guitar effect and amp modelling using neural networks (LSTM, GRU, Wave
 
 ## Features
 
-- **Model Architectures**: LSTM, GRU with configurable sizes (nano/small/medium/large/xl)
+- **Model Architectures**: LSTM, GRU, and causal WaveNet with configurable sizes
 - **Audio Processing**: 48kHz sample rate, chunked processing for memory efficiency
 - **Training**: PyTorch Lightning with TBPTT (Truncated Backpropagation Through Time) and burn-in support
 - **Live metrics**: CSV and TensorBoard logs written to the same training run directory
@@ -30,6 +30,9 @@ python scripts/train.py --config configs/models/lstm/lstm_medium.yaml
 
 # Train a GRU model
 python scripts/train.py --config configs/models/gru/gru_medium.yaml
+
+# Train a causal WaveNet
+python scripts/train.py --config configs/models/wavenet/wavenet_small.yaml
 
 # Train with custom epochs
 python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epochs 50
@@ -78,6 +81,13 @@ python scripts/export.py \
 | medium | 64 | 2 | 36 | 4 | ~31K |
 | large | 96 | 2 | 36 | 3 | ~61K |
 | xl | 128 | 2 | 36 | 3 | ~103K |
+
+### WaveNet Models
+
+WaveNet configurations use repeated dilation cycles. Its exact receptive field is
+`1 + (kernel_size - 1) * stacks * (2**layers - 1)` samples. Full-sequence,
+chunked, and cached sample inference are causal. TorchScript and ONNX export are
+supported; the current RTNeural JSON format cannot represent the WaveNet graph.
 
 ## Using NAM-Style Test Signals
 

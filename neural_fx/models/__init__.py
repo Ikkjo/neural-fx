@@ -1,17 +1,21 @@
 from ..config import ModelConfig
 from .base import BaseNeuralFXModel, UnsupportedExportError
-from .recurrent import NeuralfxLSTM, NeuralfxGRU, RecurrentNeuralFXModel
+from .recurrent import NeuralfxGRU, NeuralfxLSTM, RecurrentNeuralFXModel
+from .wavenet import CausalConv1d, DilatedResidualBlock, WaveNetModel
 
 __all__ = [
-    "BaseNeuralFXModel",
-    "UnsupportedExportError",
-    "NeuralfxLSTM",
-    "NeuralfxGRU",
-    "RecurrentNeuralFXModel",
     "MODEL_REGISTRY",
+    "BaseNeuralFXModel",
+    "CausalConv1d",
+    "DilatedResidualBlock",
+    "NeuralfxGRU",
+    "NeuralfxLSTM",
+    "RecurrentNeuralFXModel",
+    "UnsupportedExportError",
+    "WaveNetModel",
     "create_model_from_config",
-    "register_model",
     "get_available_models",
+    "register_model",
 ]
 
 
@@ -19,8 +23,8 @@ __all__ = [
 MODEL_REGISTRY: dict[str, type[BaseNeuralFXModel]] = {
     "lstm": NeuralfxLSTM,
     "gru": NeuralfxGRU,
+    "wavenet": WaveNetModel,
     # Placeholder entries for models that may be implemented later
-    # "wavenet": WaveNetModel,
     # "mamba": MambaModel,
     # "s4": S4Model,
 }

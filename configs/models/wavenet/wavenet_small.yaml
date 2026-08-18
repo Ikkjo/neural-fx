@@ -1,0 +1,38 @@
+version: "1.0"
+name: "wavenet_small"
+
+model:
+  type: "wavenet"
+  input_size: 1
+  output_size: 1
+  sample_rate: 48000
+  params:
+    layers: 8
+    stacks: 2
+    kernel_size: 2
+    dilation_channels: 16
+    residual_channels: 16
+    skip_channels: 32
+
+training:
+  batch_size: 16
+  epochs: 100
+  segment_length: 8192
+  num_workers: 4
+
+optimizer:
+  type: "adam"
+  lr: 0.001
+
+lr_scheduler:
+  type: "exponential"
+  gamma: 0.995
+
+loss:
+  type: "mse"
+  mask_first: 511
+
+data:
+  train:
+    input: "data/DI.wav"
+    target: "data/effect.wav"

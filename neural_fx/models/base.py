@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 
 
 class UnsupportedExportError(NotImplementedError):
@@ -32,7 +31,7 @@ class BaseNeuralFXModel(nn.Module, ABC):
 
     def detach_state(self) -> None:
         """Detach state from computation graph for TBPTT."""
-        pass  # Override in stateful models
+        # Override in stateful models
 
     # Validation
     @abstractmethod
@@ -73,7 +72,7 @@ class BaseNeuralFXModel(nn.Module, ABC):
     # Factory
     @classmethod
     @abstractmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BaseNeuralFXModel":
+    def from_config(cls, config: dict[str, Any]) -> "BaseNeuralFXModel":
         """Create model from configuration dictionary."""
         ...
 
