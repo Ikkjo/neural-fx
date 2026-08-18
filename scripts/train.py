@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -96,6 +97,22 @@ def create_trainer(
 ) -> L.Trainer:
     """Create a Lightning trainer with the config's determinism contract."""
     return L.Trainer(deterministic=config.training.deterministic, **trainer_kwargs)
+
+
+def publish_best_checkpoint(
+    best_model_path: str, checkpoint_dir: str | Path, config_name: str
+) -> Path | None:
+    """Copy the selected checkpoint to the stable path used by run manifests."""
+    if not best_model_path:
+        return None
+    source = Path(best_model_path).resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"Selected checkpoint does not exist: {source}")
+    destination = (Path(checkpoint_dir) / config_name / "best.ckpt").resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source != destination:
+        shutil.copy2(source, destination)
+    return destination
 
 
 def main():
@@ -301,7 +318,10 @@ def main():
     else:
         trainer.fit(module)
 
-    print(f"Training complete. Best checkpoint: {checkpoint_callback.best_model_path}")
+    canonical_checkpoint = publish_best_checkpoint(
+        checkpoint_callback.best_model_path, args.checkpoint_dir, config.name
+    )
+    print(f"Training complete. Best checkpoint: {canonical_checkpoint}")
 
     # Generate plots if requested
     if args.plot:

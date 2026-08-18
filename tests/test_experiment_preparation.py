@@ -15,7 +15,7 @@ from neural_fx.experiments.issue15 import generate_issue15_run_files
 from neural_fx.models import create_model_from_config
 from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
 from neural_fx.training.lightning_module import NeuralFXModule
-from scripts.train import create_trainer
+from scripts.train import create_trainer, publish_best_checkpoint
 
 
 def _write_delayed_pair(root: Path) -> tuple[Path, Path]:
@@ -130,6 +130,18 @@ def test_normalize_and_deterministic_flags_reach_runtime_construction() -> None:
     with patch("scripts.train.L.Trainer") as trainer:
         create_trainer(trainer_config, {"max_epochs": 1})
     trainer.assert_called_once_with(deterministic=True, max_epochs=1)
+
+
+def test_best_checkpoint_is_published_at_manifest_path(tmp_path: Path) -> None:
+    selected = tmp_path / "epoch=03-val_loss=0.1.ckpt"
+    selected.write_bytes(b"checkpoint")
+
+    canonical = publish_best_checkpoint(
+        selected.as_posix(), tmp_path / "runs", "experiment"
+    )
+
+    assert canonical == (tmp_path / "runs/experiment/best.ckpt").resolve()
+    assert canonical.read_bytes() == b"checkpoint"
 
 
 def test_final_run_generator_writes_matched_reproducible_configs(
