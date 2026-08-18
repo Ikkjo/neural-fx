@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from ..config import NeuralFXConfig, LossConfig
+from ..config import LossConfig, NeuralFXConfig
 from ..data.dataset import AudioDataset
 from ..data.transforms import build_augmentation_transform
 from ..losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss

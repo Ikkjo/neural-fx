@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
 from pathlib import Path
+from typing import Any, Dict
+
 import torch.nn as nn
 from torch import Tensor
 

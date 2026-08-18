@@ -1,23 +1,23 @@
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
 import torch
 import torchaudio
-import pytest
 
-from neural_fx.config import ModelConfig, LSTMParams
-from neural_fx.models.recurrent import NeuralfxLSTM
+from neural_fx.config import LSTMParams, ModelConfig
 from neural_fx.inference.streaming import (
     StreamingProcessor,
-    load_audio,
-    save_audio,
-    process_audio,
     evaluate_model,
+    load_audio,
+    process_audio,
+    save_audio,
 )
+from neural_fx.models.recurrent import NeuralfxLSTM
 
 
 class TestStreamingInference:
@@ -192,9 +192,9 @@ class TestStreamingInference:
             torchaudio.save(str(input_path), torch.randn(1, 4800), 48000)
 
             output = process_audio(model, input_path, output_path, chunk_size=1024)
-            output_info = torchaudio.info(str(output_path))
+            _, output_sample_rate = torchaudio.load(str(output_path))
 
-            assert output_info.sample_rate == 44100
+            assert output_sample_rate == 44100
             assert output.shape[-1] == 4410
 
     def test_evaluate_model(self, simple_model, temp_audio_file):

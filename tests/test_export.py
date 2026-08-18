@@ -74,6 +74,7 @@ class TestModelExport:
             sample_rate=48000,
         )
 
+    @pytest.mark.onnx
     def test_onnx_export_simple_lstm(self, simple_lstm_config):
         """Test ONNX export for simple LSTM model."""
         model = NeuralfxLSTM(simple_lstm_config)
@@ -86,6 +87,7 @@ class TestModelExport:
             assert export_path.exists()
             assert export_path.stat().st_size > 0
 
+    @pytest.mark.onnx
     def test_onnx_export_lstm_with_conv(self, lstm_with_conv_config):
         """Test ONNX export for LSTM with convolution."""
         model = NeuralfxLSTM(lstm_with_conv_config)
@@ -97,6 +99,7 @@ class TestModelExport:
 
             assert export_path.exists()
 
+    @pytest.mark.onnx
     def test_onnx_export_supports_dynamic_batch_and_time(
         self, simple_lstm_config, lstm_with_conv_config
     ):
@@ -232,6 +235,7 @@ class TestModelExport:
                 # Weights should be non-empty
                 assert len(layer["weights"]) > 0
 
+    @pytest.mark.onnx
     def test_export_creates_directories(self, simple_lstm_config):
         """Test that export creates parent directories if needed."""
         model = NeuralfxLSTM(simple_lstm_config)

@@ -37,7 +37,15 @@ pytest -k "lstm"
 
 # Run tests in parallel (requires pytest-xdist)
 pytest -n auto
+
+# Run the optional ONNX exporter tests explicitly
+pytest --run-onnx tests/test_export.py
 ```
+
+The default suite skips ONNX export tests. The exporter is a heavyweight,
+optional toolchain and is tracked separately from the core training and
+inference suite. Use `--run-onnx` after installing the ONNX dependencies when
+working on export support.
 
 ### Test Discovery
 

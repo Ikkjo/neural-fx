@@ -1,5 +1,5 @@
 from .base import BaseNeuralFXModel
-from .recurrent import NeuralfxLSTM, NeuralfxGRU, RecurrentNeuralFXModel
+from .recurrent import NeuralfxGRU, NeuralfxLSTM, RecurrentNeuralFXModel
 
 __all__ = [
     "BaseNeuralFXModel",

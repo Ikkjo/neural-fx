@@ -1,9 +1,11 @@
-from neural_fx.models.recurrent import NeuralfxLSTM, NeuralfxGRU
-from neural_fx.config import ModelConfig, LSTMParams, Conv1dConfig
-import torch
-import pytest
-import sys
 import os
+import sys
+
+import pytest
+import torch
+
+from neural_fx.config import Conv1dConfig, LSTMParams, ModelConfig
+from neural_fx.models.recurrent import NeuralfxGRU, NeuralfxLSTM
 
 # Ensure the package is in the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
