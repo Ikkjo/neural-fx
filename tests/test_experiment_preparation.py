@@ -14,6 +14,7 @@ from neural_fx.config import config_from_dict, load_config
 from neural_fx.experiments.issue15 import generate_issue15_run_files
 from neural_fx.models import create_model_from_config
 from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
+from neural_fx.training.callbacks import NeuralFXCheckpoint
 from neural_fx.training.lightning_module import NeuralFXModule
 from scripts.train import create_trainer, publish_best_checkpoint
 
@@ -142,6 +143,30 @@ def test_best_checkpoint_is_published_at_manifest_path(tmp_path: Path) -> None:
 
     assert canonical == (tmp_path / "runs/experiment/best.ckpt").resolve()
     assert canonical.read_bytes() == b"checkpoint"
+
+
+def test_terminal_checkpoint_overwrites_callback_last_state(tmp_path: Path) -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "terminal-state",
+            "model": {"type": "lstm", "params": {"hidden_size": 4}},
+            "training": {},
+            "loss": {"type": "mse"},
+            "data": {
+                "train": {"input": "input.wav", "target": "target.wav"}
+            },
+        }
+    )
+    callback = NeuralFXCheckpoint(config, dirpath=tmp_path)
+    trainer = object()
+
+    with patch.object(callback, "_save_checkpoint") as save_checkpoint:
+        terminal = callback.save_terminal_checkpoint(trainer)
+
+    assert terminal == tmp_path / "last.ckpt"
+    assert callback.last_model_path == str(terminal)
+    save_checkpoint.assert_called_once_with(trainer, str(terminal))
 
 
 def test_final_run_generator_writes_matched_reproducible_configs(

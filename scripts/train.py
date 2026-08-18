@@ -237,7 +237,8 @@ def main():
         val_latency=val_latency_calibration,
     )
 
-    epochs = args.max_epochs if args.max_epochs else config.training.epochs
+    epochs = args.max_epochs if args.max_epochs is not None else config.training.epochs
+    config.training.epochs = epochs
 
     # Setup callbacks
     callbacks = []
@@ -318,10 +319,12 @@ def main():
     else:
         trainer.fit(module)
 
+    terminal_checkpoint = checkpoint_callback.save_terminal_checkpoint(trainer)
     canonical_checkpoint = publish_best_checkpoint(
         checkpoint_callback.best_model_path, args.checkpoint_dir, config.name
     )
     print(f"Training complete. Best checkpoint: {canonical_checkpoint}")
+    print(f"Terminal checkpoint: {terminal_checkpoint}")
 
     # Generate plots if requested
     if args.plot:
