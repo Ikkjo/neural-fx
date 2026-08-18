@@ -1,43 +1,43 @@
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
 import torch
 import torchaudio
-import pytest
 
 from neural_fx.config import (
-    ModelConfig,
-    LSTMParams,
-    NeuralFXConfig,
-    TrainingConfig,
-    OptimizerConfig,
-    LRSchedulerConfig,
-    LossConfig,
+    AugmentationConfig,
     DataConfig,
     DataPaths,
-    AugmentationConfig,
+    LossConfig,
     LossWeights,
+    LRSchedulerConfig,
+    LSTMParams,
+    ModelConfig,
+    NeuralFXConfig,
+    OptimizerConfig,
     STFTLossConfig,
+    TrainingConfig,
 )
-from neural_fx.models.recurrent import NeuralfxLSTM
-from neural_fx.training.lightning_module import NeuralFXModule
+from neural_fx.data.dataset import AudioDataset
+from neural_fx.data.transforms import (
+    AddNoise,
+    Compose,
+    RandomGain,
+    build_augmentation_transform,
+)
+from neural_fx.losses.audio_losses import MultiResolutionSTFTLoss
 from neural_fx.models import (
     MODEL_REGISTRY,
     create_model_from_config,
     get_available_models,
 )
-from neural_fx.data.transforms import (
-    RandomGain,
-    AddNoise,
-    Compose,
-    build_augmentation_transform,
-)
-from neural_fx.losses.audio_losses import MultiResolutionSTFTLoss
-from neural_fx.data.dataset import AudioDataset
+from neural_fx.models.recurrent import NeuralfxLSTM
+from neural_fx.training.lightning_module import NeuralFXModule
 
 
 class TestModelRegistry:

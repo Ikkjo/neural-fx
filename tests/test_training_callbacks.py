@@ -1,27 +1,27 @@
 """Tests for training callbacks module."""
 
-import sys
 import os
+import sys
 import tempfile
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
 
+from neural_fx.config import (
+    DataConfig,
+    DataPaths,
+    LossConfig,
+    LRSchedulerConfig,
+    LSTMParams,
+    ModelConfig,
+    NeuralFXConfig,
+    OptimizerConfig,
+    TrainingConfig,
+)
 from neural_fx.training.callbacks import (
     NeuralFXCheckpoint,
     ValidationEarlyStopping,
-)
-from neural_fx.config import (
-    NeuralFXConfig,
-    ModelConfig,
-    TrainingConfig,
-    OptimizerConfig,
-    LRSchedulerConfig,
-    LossConfig,
-    DataConfig,
-    DataPaths,
-    LSTMParams,
 )
 
 

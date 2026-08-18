@@ -1,13 +1,13 @@
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
 import torch
 import torchaudio
-import pytest
 
 from neural_fx.data.dataset import AudioDataset
 

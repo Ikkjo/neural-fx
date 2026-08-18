@@ -164,13 +164,15 @@ class MultiResolutionSTFTLoss(nn.Module):
 
     def __init__(
         self,
-        fft_sizes: list[int] = [512, 1024, 2048],
+        fft_sizes: list[int] | None = None,
         hop_sizes: list[int] | None = None,
         win_sizes: list[int] | None = None,
         sc_loss_weight: float = 1.0,
         mag_loss_weight: float = 1.0,
     ):
         super().__init__()
+        if fft_sizes is None:
+            fft_sizes = [512, 1024, 2048]
         if hop_sizes is None:
             hop_sizes = [fft // 4 for fft in fft_sizes]
         if win_sizes is None:

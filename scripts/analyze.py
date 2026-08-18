@@ -62,14 +62,14 @@ def load_checkpoint(checkpoint_path: str):
     else:
         # Create a minimal config from hyperparameters
         from neural_fx.config import (
-            NeuralFXConfig,
-            ModelConfig,
-            TrainingConfig,
-            OptimizerConfig,
-            LRSchedulerConfig,
-            LossConfig,
             DataConfig,
             DataPaths,
+            LossConfig,
+            LRSchedulerConfig,
+            ModelConfig,
+            NeuralFXConfig,
+            OptimizerConfig,
+            TrainingConfig,
         )
 
         config = NeuralFXConfig(
