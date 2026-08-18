@@ -12,12 +12,12 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from neural_fx.analysis.plotting import TrainingAnalyzer
-from neural_fx.config import load_config
+from neural_fx.config import config_from_dict, load_config
 from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
 
 
-def load_checkpoint(checkpoint_path: str):
+def load_checkpoint(checkpoint_path: str, config_path: str | None = None):
     """Load model from checkpoint.
 
     Args:
@@ -34,56 +34,23 @@ def load_checkpoint(checkpoint_path: str):
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
-    # Get config from checkpoint hyperparameters or load from meta.json
+    # Prefer an explicit config, then the self-contained checkpoint, then metadata.
     meta_path = checkpoint_path.with_suffix(".meta.json")
-    _metadata = None
+    metadata = None
     if meta_path.exists():
         with open(meta_path) as f:
-            _metadata = json.load(f)
+            metadata = json.load(f)
 
-        # Reconstruct config from metadata
-        # This is a simplified version - in practice, you'd want to
-        # properly reconstruct the NeuralFXConfig dataclass
-        print(f"Loaded metadata from {meta_path}")
-
-    # Load config if available
-    if "hyper_parameters" in checkpoint:
-        config_dict = checkpoint["hyper_parameters"]
-        print("Loaded config from checkpoint hyper_parameters")
-    else:
-        raise ValueError("No config found in checkpoint")
-
-    # Try to find and load original config file
-    config_path = (
-        Path("configs/models") / config_dict.get("name", "model") / "config.yaml"
-    )
-    if config_path.exists():
+    if config_path is not None:
         config = load_config(config_path)
+    elif "neural_fx_config" in checkpoint:
+        config = config_from_dict(checkpoint["neural_fx_config"])
+    elif metadata is not None and "config" in metadata:
+        config = config_from_dict(metadata["config"])
     else:
-        # Create a minimal config from hyperparameters
-        from neural_fx.config import (
-            NeuralFXConfig,
-            ModelConfig,
-            TrainingConfig,
-            OptimizerConfig,
-            LRSchedulerConfig,
-            LossConfig,
-            DataConfig,
-            DataPaths,
-        )
-
-        config = NeuralFXConfig(
-            version="1.0",
-            name=config_dict.get("name", "model"),
-            model=ModelConfig(type="lstm", params={}),
-            training=TrainingConfig(
-                batch_size=config_dict.get("batch_size", 32),
-                segment_length=config_dict.get("segment_length", 8192),
-            ),
-            optimizer=OptimizerConfig(),
-            lr_scheduler=LRSchedulerConfig(),
-            loss=LossConfig(),
-            data=DataConfig(train=DataPaths(input="", target="")),
+        raise ValueError(
+            "Checkpoint does not contain a complete neural-fx configuration. "
+            "Pass --config for legacy checkpoints."
         )
 
     # Create model
@@ -120,6 +87,12 @@ def main():
         help="Path to checkpoint file",
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Config YAML for legacy checkpoints without embedded configuration",
+    )
+    parser.add_argument(
         "--input",
         type=str,
         default=None,
@@ -151,22 +124,14 @@ def main():
     args = parser.parse_args()
 
     print(f"Loading checkpoint from {args.checkpoint}...")
-    model, config = load_checkpoint(args.checkpoint)
+    model, config = load_checkpoint(args.checkpoint, args.config)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Determine input/target files
-    input_file = args.input
-    target_file = args.target
-
-    if input_file is None or target_file is None:
-        # Try to get from config or metadata
-        print("Input/target files not specified, attempting to load from config...")
-        # For now, we require explicit input/target
-        if input_file is None or target_file is None:
-            print("Error: --input and --target must be specified")
-            sys.exit(1)
+    input_file = args.input or config.data.train.input
+    target_file = args.target or config.data.train.target
 
     print(f"Creating dataset from {input_file} and {target_file}...")
 

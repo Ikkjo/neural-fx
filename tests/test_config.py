@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from neural_fx.config import load_config
+from neural_fx.config import LSTMParams, config_from_dict, load_config
 
 
 def _write_config(
@@ -143,3 +143,23 @@ def test_negative_calibration_duration_is_rejected(tmp_path: Path) -> None:
         match="calibration_duration_seconds cannot be negative",
     ):
         load_config(path)
+
+
+def test_null_conv_config_loads_as_disabled() -> None:
+    """Accept the natural YAML representation for an optional convolution."""
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "no_conv",
+            "model": {
+                "type": "lstm",
+                "params": {"hidden_size": 8, "conv1d": None},
+            },
+            "training": {},
+            "loss": {"type": "mse"},
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+        }
+    )
+
+    assert isinstance(config.model.params, LSTMParams)
+    assert config.model.params.conv1d is None

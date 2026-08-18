@@ -153,7 +153,7 @@ class LossConfig:
     type: str = "mse"
     weights: LossWeights | None = None
     pre_emphasis: PreEmphasisConfig | None = None
-    mask_first: int = 4096
+    mask_first: int = 0
     stft: STFTLossConfig | None = None
 
 
@@ -241,7 +241,7 @@ def _load_model_params(model_type: str, params: dict) -> ModelParamsType:
         raise ValueError(f"Unknown model type: {model_type}")
 
     # Handle nested conv1d for LSTM/GRU
-    if cls == LSTMParams and "conv1d" in params:
+    if cls == LSTMParams and params.get("conv1d") is not None:
         params = params.copy()
         params["conv1d"] = Conv1dConfig(**params["conv1d"])
 
@@ -291,11 +291,8 @@ def _load_validation_config(val_cfg: dict | None) -> ValidationConfig | None:
     return ValidationConfig(**val_cfg)
 
 
-def load_config(path: Path | str) -> NeuralFXConfig:
-    """Load and parse a YAML config file."""
-    with open(path) as f:
-        d = yaml.safe_load(f)
-
+def config_from_dict(d: dict) -> NeuralFXConfig:
+    """Construct a typed configuration from its serialized representation."""
     version = d["version"]
     name = d["name"]
     model_cfg = d["model"]
@@ -325,7 +322,11 @@ def load_config(path: Path | str) -> NeuralFXConfig:
 
     # Load latency and validation configs
     latency_cfg = _load_latency_config(d.get("latency"))
-    validation_cfg = _load_validation_config(d.get("validation"))
+    validation_cfg = (
+        None
+        if "validation" in d and d["validation"] is None
+        else _load_validation_config(d.get("validation"))
+    )
 
     return NeuralFXConfig(
         version=version,
@@ -354,12 +355,12 @@ def load_config(path: Path | str) -> NeuralFXConfig:
         loss=LossConfig(
             type=loss_cfg["type"],
             weights=LossWeights(**loss_cfg["weights"])
-            if "weights" in loss_cfg
+            if loss_cfg.get("weights") is not None
             else None,
             pre_emphasis=PreEmphasisConfig(**loss_cfg["pre_emphasis"])
-            if "pre_emphasis" in loss_cfg
+            if loss_cfg.get("pre_emphasis") is not None
             else None,
-            mask_first=loss_cfg.get("mask_first", 4096),
+            mask_first=loss_cfg.get("mask_first", 0),
             stft=stft_loss_config,
         ),
         data=DataConfig(
@@ -369,3 +370,9 @@ def load_config(path: Path | str) -> NeuralFXConfig:
         latency=latency_cfg,
         validation=validation_cfg,
     )
+
+
+def load_config(path: Path | str) -> NeuralFXConfig:
+    """Load and parse a YAML config file."""
+    with open(path) as f:
+        return config_from_dict(yaml.safe_load(f))

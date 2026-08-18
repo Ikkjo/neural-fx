@@ -212,15 +212,16 @@ def main():
             "correlation_score": latency_calibration.correlation_score,
         }
 
+    checkpoint_metric = "val_loss" if config.data.val else "train_loss"
     checkpoint_callback = NeuralFXCheckpoint(
         config=config,
         input_file=input_path,
         target_file=target_path,
         latency_calibration=latency_cal_dict,
         dirpath=Path(args.checkpoint_dir) / config.name,
-        filename="{epoch:02d}-{val_loss:.4f}",
+        filename=f"{{epoch:02d}}-{{{checkpoint_metric}:.4f}}",
         save_top_k=3,
-        monitor="val_loss" if config.data.val else "train_loss",
+        monitor=checkpoint_metric,
         mode="min",
         save_last=True,
     )

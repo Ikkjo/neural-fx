@@ -12,9 +12,22 @@ import torchaudio
 import pytest
 
 from neural_fx.analysis.plotting import TrainingAnalyzer, create_analyzer
-from neural_fx.config import ModelConfig, LSTMParams
+from neural_fx.config import (
+    DataConfig,
+    DataPaths,
+    LRSchedulerConfig,
+    LSTMParams,
+    LossConfig,
+    ModelConfig,
+    NeuralFXConfig,
+    OptimizerConfig,
+    TrainingConfig,
+)
 from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.data.dataset import AudioDataset
+from neural_fx.models import create_model_from_config
+from neural_fx.training.lightning_module import NeuralFXModule
+from scripts.analyze import load_checkpoint
 
 
 class TestTrainingAnalyzer:
@@ -170,6 +183,38 @@ class TestTrainingAnalyzer:
 
             # Correlation should be between -1 and 1
             assert -1 <= report["correlation"] <= 1
+
+    def test_checkpoint_reconstructs_complete_model_config(self):
+        """Analysis can rebuild a model without locating its original YAML."""
+        model_config = ModelConfig(
+            type="gru",
+            params=LSTMParams(hidden_size=7, num_layers=1),
+            sample_rate=44100,
+        )
+        config = NeuralFXConfig(
+            version="1.0",
+            name="roundtrip",
+            model=model_config,
+            training=TrainingConfig(batch_size=2, segment_length=1024),
+            optimizer=OptimizerConfig(lr=0.002),
+            lr_scheduler=LRSchedulerConfig(),
+            loss=LossConfig(mask_first=64),
+            data=DataConfig(
+                train=DataPaths(input="input.wav", target="target.wav")
+            ),
+        )
+        module = NeuralFXModule(create_model_from_config(model_config), config)
+        checkpoint = {"state_dict": module.state_dict()}
+        module.on_save_checkpoint(checkpoint)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = Path(tmpdir) / "model.ckpt"
+            torch.save(checkpoint, checkpoint_path)
+            loaded_model, loaded_config = load_checkpoint(str(checkpoint_path))
+
+        assert loaded_config == config
+        assert loaded_model.config.type == "gru"
+        assert loaded_model.sample_rate == 44100
 
 
 if __name__ == "__main__":

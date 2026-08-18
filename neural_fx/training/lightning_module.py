@@ -1,4 +1,5 @@
-from typing import Callable
+import dataclasses
+from typing import Any, Callable
 
 import lightning as L
 import torch
@@ -42,7 +43,7 @@ class NeuralFXModule(L.LightningModule):
         self.save_hyperparameters(hparams)
 
         self.tbptt_config = config.training.tbptt
-        self.burn_in = self.tbptt_config.burn_in if self.tbptt_config else 0
+        self.burn_in = config.loss.mask_first
         self.loss_fn = self._build_loss(config.loss)
 
         # Build augmentation transform if enabled
@@ -91,7 +92,17 @@ class NeuralFXModule(L.LightningModule):
 
             # ESR loss
             if esr_weight > 0:
-                loss = loss + esr_weight * ESR(pred, target)
+                pre_emphasis = loss_config.pre_emphasis
+                coeff = (
+                    pre_emphasis.coef
+                    if pre_emphasis is not None and pre_emphasis.enabled
+                    else None
+                )
+                loss = loss + esr_weight * ESR(
+                    pred,
+                    target,
+                    pre_emphasis_coeff=coeff,
+                )
 
             # MSE loss
             if mse_weight > 0:
@@ -108,6 +119,10 @@ class NeuralFXModule(L.LightningModule):
             return loss
 
         return loss_fn
+
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Store the complete typed configuration with every checkpoint."""
+        checkpoint["neural_fx_config"] = dataclasses.asdict(self.config)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.model(x)

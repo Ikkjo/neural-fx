@@ -19,12 +19,20 @@ def pre_emphasis_filter(x: Tensor, coeff: float = 0.95) -> Tensor:
     return torch.cat([x[..., :1], x[..., 1:] - coeff * x[..., :-1]], dim=-1)
 
 
-def ESR(y_pred: Tensor, y_true: Tensor) -> Tensor:
+def ESR(
+    y_pred: Tensor,
+    y_true: Tensor,
+    pre_emphasis_coeff: float | None = 0.95,
+) -> Tensor:
     """
     Error to signal ratio with pre-emphasis filter.
     """
-    y_true_filtered = pre_emphasis_filter(y_true)
-    y_pred_filtered = pre_emphasis_filter(y_pred)
+    if pre_emphasis_coeff is None:
+        y_true_filtered = y_true
+        y_pred_filtered = y_pred
+    else:
+        y_true_filtered = pre_emphasis_filter(y_true, pre_emphasis_coeff)
+        y_pred_filtered = pre_emphasis_filter(y_pred, pre_emphasis_coeff)
     return torch.sum(torch.pow(y_true_filtered - y_pred_filtered, 2)) / (
         torch.sum(torch.pow(y_true_filtered, 2)) + 1e-10
     )

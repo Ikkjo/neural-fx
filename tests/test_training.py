@@ -14,6 +14,7 @@ from neural_fx.config import (
     LSTMParams,
     NeuralFXConfig,
     TrainingConfig,
+    TBPTTConfig,
     OptimizerConfig,
     LRSchedulerConfig,
     LossConfig,
@@ -21,6 +22,7 @@ from neural_fx.config import (
     DataPaths,
     AugmentationConfig,
     LossWeights,
+    PreEmphasisConfig,
     STFTLossConfig,
 )
 from neural_fx.models.recurrent import NeuralfxLSTM
@@ -36,7 +38,7 @@ from neural_fx.data.transforms import (
     Compose,
     build_augmentation_transform,
 )
-from neural_fx.losses.audio_losses import MultiResolutionSTFTLoss
+from neural_fx.losses.audio_losses import ESR, MultiResolutionSTFTLoss
 from neural_fx.data.dataset import AudioDataset
 from neural_fx.preprocessing.latency import LatencyCalibration
 
@@ -492,6 +494,28 @@ class TestUpdatedLossWeights:
         # Should not raise error even with stft weight > 0 but disabled
         loss = module.training_step((x, y), batch_idx=0)
         assert loss is not None
+
+    def test_esr_uses_configured_pre_emphasis(self, base_config):
+        """The configured coefficient must reach the ESR calculation."""
+        base_config.loss.weights = LossWeights(esr=1.0, mse=0.0, stft=0.0)
+        base_config.loss.pre_emphasis = PreEmphasisConfig(enabled=True, coef=0.2)
+        module = NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
+        pred = torch.tensor([[[0.0, 0.5, -0.25, 0.75]]])
+        target = torch.tensor([[[0.25, 0.25, 0.0, 0.5]]])
+
+        assert torch.allclose(
+            module.loss_fn(pred, target),
+            ESR(pred, target, pre_emphasis_coeff=0.2),
+        )
+
+    def test_loss_mask_controls_burn_in(self, base_config):
+        """Loss masking is owned by loss.mask_first, not TBPTT warm-up config."""
+        base_config.loss.mask_first = 123
+        base_config.training.tbptt = TBPTTConfig(enabled=True, burn_in=999)
+
+        module = NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
+
+        assert module.burn_in == 123
 
 
 class TestValidationSupport:
