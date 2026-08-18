@@ -38,6 +38,7 @@ from neural_fx.data.transforms import (
 )
 from neural_fx.losses.audio_losses import MultiResolutionSTFTLoss
 from neural_fx.data.dataset import AudioDataset
+from neural_fx.preprocessing.latency import LatencyCalibration
 
 
 class TestModelRegistry:
@@ -380,6 +381,43 @@ class TestUpdatedDataset:
         # Val dataset should not have random segments or transforms
         assert not val_dataset.random_segments
         assert val_dataset.transform is None
+
+    def test_module_applies_latency_to_training_dataset(self, temp_audio_files):
+        """The calibration computed by the CLI reaches the actual dataset."""
+        input_path, target_path, sample_rate = temp_audio_files
+        model_config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, num_layers=1),
+            sample_rate=sample_rate,
+        )
+        config = NeuralFXConfig(
+            version="1.0",
+            name="latency_test",
+            model=model_config,
+            training=TrainingConfig(batch_size=1, segment_length=8192),
+            optimizer=OptimizerConfig(),
+            lr_scheduler=LRSchedulerConfig(),
+            loss=LossConfig(),
+            data=DataConfig(
+                train=DataPaths(input=str(input_path), target=str(target_path))
+            ),
+        )
+        calibration = LatencyCalibration(
+            delay_samples=32,
+            method="manual",
+            correlation_score=1.0,
+        )
+        module = NeuralFXModule(
+            NeuralfxLSTM(model_config),
+            config,
+            train_latency=calibration,
+        )
+
+        dataset = module._create_train_dataset()
+
+        assert dataset.latency_calibration == calibration
+        assert dataset.input_audio.shape[-1] == 4 * sample_rate - 32
+        assert dataset.target_audio.shape == dataset.input_audio.shape
 
 
 class TestUpdatedLossWeights:

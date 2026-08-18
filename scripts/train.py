@@ -179,12 +179,24 @@ def main():
 
     # Run latency calibration
     latency_calibration = run_latency_calibration(config, input_path, target_path)
+    val_latency_calibration = None
+    if config.data.val is not None:
+        val_latency_calibration = run_latency_calibration(
+            config,
+            config.data.val.input,
+            config.data.val.target,
+        )
 
     # Create model using registry
     model = create_model_from_config(config.model)
 
     # Create Lightning module
-    module = NeuralFXModule(model, config)
+    module = NeuralFXModule(
+        model,
+        config,
+        train_latency=latency_calibration,
+        val_latency=val_latency_calibration,
+    )
 
     epochs = args.max_epochs if args.max_epochs else config.training.epochs
 

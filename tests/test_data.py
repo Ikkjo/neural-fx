@@ -145,6 +145,31 @@ class TestAudioDataset:
             # After normalization, max should be <= 1.0
             assert x.abs().max() <= 1.0 + 1e-6
 
+    def test_dataset_normalization_preserves_relative_level(self):
+        """Pair normalization must not erase the modeled gain relationship."""
+        sample_rate = 48000
+        input_audio = torch.full((1, 8192), 0.8)
+        target_audio = torch.full((1, 8192), 0.2)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            input_path = tmpdir / "input.wav"
+            target_path = tmpdir / "target.wav"
+            torchaudio.save(str(input_path), input_audio, sample_rate)
+            torchaudio.save(str(target_path), target_audio, sample_rate)
+
+            dataset = AudioDataset(
+                input_path=input_path,
+                target_path=target_path,
+                segment_length=8192,
+                sample_rate=sample_rate,
+                normalize=True,
+            )
+            x, y = dataset[0]
+
+        assert torch.isclose(x.abs().max(), torch.tensor(1.0), atol=1e-4)
+        assert torch.isclose(y.abs().max(), torch.tensor(0.25), atol=1e-4)
+
     def test_dataset_no_normalization(self, temp_audio_files):
         """Test that audio is not normalized when normalize=False."""
         input_path, target_path, sample_rate = temp_audio_files

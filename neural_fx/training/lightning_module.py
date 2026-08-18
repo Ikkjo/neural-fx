@@ -9,15 +9,24 @@ from ..config import NeuralFXConfig, LossConfig
 from ..data.dataset import AudioDataset
 from ..data.transforms import build_augmentation_transform
 from ..losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
+from ..preprocessing.latency import LatencyCalibration
 
 
 class NeuralFXModule(L.LightningModule):
     """PyTorch Lightning module for training neural audio effects."""
 
-    def __init__(self, model, config: NeuralFXConfig):
+    def __init__(
+        self,
+        model,
+        config: NeuralFXConfig,
+        train_latency: LatencyCalibration | None = None,
+        val_latency: LatencyCalibration | None = None,
+    ):
         super().__init__()
         self.model = model
         self.config = config
+        self.train_latency = train_latency
+        self.val_latency = val_latency
         # Save hyperparameters explicitly to avoid -1 values that break TensorBoard
         # We manually extract scalar values from config to avoid nested dataclass issues
         hparams = {
@@ -219,6 +228,7 @@ class NeuralFXModule(L.LightningModule):
             sample_rate=self.config.sample_rate,
             random_segments=self.config.training.random_segments,
             transform=self.transform,
+            latency_calibration=self.train_latency,
         )
 
     def _create_val_dataset(self) -> AudioDataset | None:
@@ -233,6 +243,7 @@ class NeuralFXModule(L.LightningModule):
             sample_rate=self.config.sample_rate,
             random_segments=False,  # Sequential for validation
             transform=None,  # No augmentation for validation
+            latency_calibration=self.val_latency,
         )
 
     def train_dataloader(self) -> DataLoader:

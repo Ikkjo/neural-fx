@@ -54,6 +54,14 @@ class AudioDataset(Dataset):
         self.input_audio = self._load_audio(input_path)
         self.target_audio = self._load_audio(target_path)
 
+        if self.normalize:
+            pair_max = torch.maximum(
+                self.input_audio.abs().max(), self.target_audio.abs().max()
+            )
+            if pair_max > 0:
+                self.input_audio = self.input_audio / pair_max
+                self.target_audio = self.target_audio / pair_max
+
         # Apply latency compensation if provided
         if latency_calibration is not None:
             calibrator = LatencyCalibrator()
@@ -92,11 +100,6 @@ class AudioDataset(Dataset):
 
         if audio.shape[0] > 1:
             audio = audio.mean(dim=0, keepdim=True)
-
-        if self.normalize:
-            max_val = audio.abs().max()
-            if max_val > 0:
-                audio = audio / max_val
 
         return audio
 
