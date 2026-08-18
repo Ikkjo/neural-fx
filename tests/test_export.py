@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import numpy as np
 import torch
 import pytest
 
@@ -95,6 +96,29 @@ class TestModelExport:
             model.export_onnx(export_path)
 
             assert export_path.exists()
+
+    def test_onnx_export_supports_dynamic_batch_and_time(
+        self, simple_lstm_config, lstm_with_conv_config
+    ):
+        """Exported recurrent models run with shapes unlike the trace input."""
+        onnxruntime = pytest.importorskip("onnxruntime")
+
+        for config in (simple_lstm_config, lstm_with_conv_config):
+            model = NeuralfxLSTM(config).eval()
+            input_tensor = torch.randn(3, 1, 20)
+            model.reset_state()
+            with torch.no_grad():
+                expected = model(input_tensor).numpy()
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                export_path = Path(tmpdir) / "model.onnx"
+                model.export_onnx(export_path)
+                session = onnxruntime.InferenceSession(
+                    str(export_path), providers=["CPUExecutionProvider"]
+                )
+                actual = session.run(None, {"input": input_tensor.numpy()})[0]
+
+            np.testing.assert_allclose(actual, expected, rtol=1e-4, atol=1e-5)
 
     def test_torchscript_export_simple_lstm(self, simple_lstm_config):
         """Test TorchScript export for simple LSTM model."""

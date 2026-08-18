@@ -11,6 +11,52 @@ from ..config import LSTMParams, ModelConfig, _load_model_params
 from .base import BaseNeuralFXModel
 
 
+class _RecurrentExportWrapper(nn.Module):
+    """Stateless recurrent graph used by deployment exporters."""
+
+    def __init__(self, model: "RecurrentNeuralFXModel") -> None:
+        super().__init__()
+        self.conv1d = model.conv1d
+        self.conv_transpose = model.conv_transpose
+        self.rnn = model.rnn
+        self.fc_out = model.fc_out
+        self.skip_projection = getattr(model, "skip_projection", None)
+        self.conditioning_size = model.params.conditioning_size
+        self.skip_connection = model.params.skip_connection
+
+    def forward(self, x: Tensor, conditioning: Tensor | None = None) -> Tensor:
+        identity = x
+
+        if self.conv1d is not None:
+            x = self.conv1d(x)
+
+        if self.conditioning_size > 0:
+            if conditioning is None:
+                raise ValueError("Conditioning input is required for this exported model")
+            if conditioning.ndim == 2:
+                conditioning = conditioning.unsqueeze(2).expand(-1, -1, x.shape[2])
+            elif conditioning.shape[2] != x.shape[2]:
+                conditioning = F.interpolate(conditioning, size=x.shape[2])
+            x = torch.cat([x, conditioning], dim=1)
+
+        x, _ = self.rnn(x.transpose(1, 2), None)
+        x = self.fc_out(x).transpose(1, 2)
+
+        if self.conv_transpose is not None:
+            x = self.conv_transpose(x)
+
+        if self.skip_connection:
+            skip = (
+                self.skip_projection(identity)
+                if self.skip_projection is not None
+                else identity
+            )
+            if x.shape == skip.shape:
+                x = x + skip
+
+        return x
+
+
 class RecurrentNeuralFXModel(BaseNeuralFXModel):
     """Base class for recurrent neural audio effects (LSTM/GRU)."""
 
@@ -192,7 +238,10 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         self.eval()
         self.reset_state()
 
-        dummy_input = torch.randn(1, self.config.input_size, 512)
+        export_model = _RecurrentExportWrapper(self).eval()
+        # The dynamo exporter decomposes recurrent operators using the example
+        # sequence length. Keep the example short; the time axis remains dynamic.
+        dummy_input = torch.randn(1, self.config.input_size, 8)
         if self.params.conditioning_size > 0:
             dummy_cond = torch.randn(1, self.params.conditioning_size)
         else:
@@ -205,17 +254,25 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             "output": {0: "batch_size", 2: "time"},
         }
 
-        args = (dummy_input, dummy_cond) if dummy_cond is not None else (dummy_input,)
+        if dummy_cond is not None:
+            input_names.append("conditioning")
+            dynamic_axes["conditioning"] = {0: "batch_size"}
+            args = (dummy_input, dummy_cond)
+        else:
+            args = (dummy_input,)
 
         torch.onnx.export(
-            self,
+            export_model,
             args,
             path,
             input_names=input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
             opset_version=opset_version,
-            do_constant_folding=True,
+            # PyTorch 2.11's dynamo exporter cannot represent the symbolic
+            # Conv1d-stride-to-LSTM sequence length. The TorchScript exporter
+            # preserves the dynamic batch/time contract for these models.
+            dynamo=False,
         )
 
     def export_torchscript(self, path: str | Path) -> None:
