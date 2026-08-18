@@ -1,9 +1,12 @@
-from neural_fx.models.recurrent import NeuralfxLSTM, NeuralfxGRU
-from neural_fx.config import ModelConfig, LSTMParams, Conv1dConfig
-import torch
-import pytest
-import sys
+import copy
 import os
+import sys
+
+import pytest
+import torch
+
+from neural_fx.config import Conv1dConfig, LSTMParams, ModelConfig
+from neural_fx.models.recurrent import NeuralfxGRU, NeuralfxLSTM
 
 # Ensure the package is in the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -85,3 +88,77 @@ class TestRecurrentModels:
 
         assert y.ndim == 0 or y.ndim == 1
         assert model.hidden_state is not None
+
+    def test_causal_conv_matches_block_and_sample_streaming(self):
+        """Causal strided convolution is independent of future block layout."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(
+                hidden_size=6,
+                num_layers=1,
+                conv1d=Conv1dConfig(filters=4, kernel_size=3, stride=4),
+                conditioning_size=1,
+            ),
+            input_size=1,
+            output_size=1,
+        )
+        whole_model = NeuralfxLSTM(config).eval()
+        block_model = copy.deepcopy(whole_model)
+        sample_model = copy.deepcopy(whole_model)
+        future_model = copy.deepcopy(whole_model)
+        x = torch.randn(1, 1, 23)
+        changed_future = x.clone()
+        changed_future[..., 12:] += 10
+        conditioning = torch.tensor([[0.25]])
+
+        with torch.no_grad():
+            whole = whole_model(x, conditioning=conditioning)
+            blocks = torch.cat(
+                [
+                    block_model(x[..., :5], conditioning=conditioning),
+                    block_model(x[..., 5:12], conditioning=conditioning),
+                    block_model(x[..., 12:], conditioning=conditioning),
+                ],
+                dim=-1,
+            )
+            samples = torch.cat(
+                [
+                    sample_model.process_sample(
+                        x[..., index], conditioning=conditioning
+                    ).reshape(1, 1, 1)
+                    for index in range(x.shape[-1])
+                ],
+                dim=-1,
+            )
+            future = future_model(changed_future, conditioning=conditioning)
+
+        torch.testing.assert_close(blocks, whole)
+        torch.testing.assert_close(samples, whole)
+        torch.testing.assert_close(future[..., :12], whole[..., :12])
+
+    def test_skip_projection_and_recurrent_bias_initialization(self):
+        """Construction initializes skip projection and recurrent gate biases."""
+        skip_config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, skip_connection=True),
+            input_size=2,
+            output_size=1,
+        )
+        lstm = NeuralfxLSTM(skip_config)
+        gru = NeuralfxGRU(
+            ModelConfig(
+                type="gru",
+                params=LSTMParams(hidden_size=4),
+                input_size=1,
+                output_size=1,
+            )
+        )
+
+        assert lstm.skip_projection is not None
+        assert lstm(torch.randn(1, 2, 8), reset_state=True).shape == (1, 1, 8)
+        for name, bias in lstm.rnn.named_parameters():
+            if "bias" in name:
+                torch.testing.assert_close(bias[4:8], torch.ones(4))
+        for name, bias in gru.rnn.named_parameters():
+            if "bias" in name:
+                torch.testing.assert_close(bias[4:8], torch.ones(4))

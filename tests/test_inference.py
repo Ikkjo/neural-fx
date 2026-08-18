@@ -1,23 +1,23 @@
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
 import torch
 import torchaudio
-import pytest
 
-from neural_fx.config import ModelConfig, LSTMParams
-from neural_fx.models.recurrent import NeuralfxLSTM
+from neural_fx.config import LSTMParams, ModelConfig
 from neural_fx.inference.streaming import (
     StreamingProcessor,
-    load_audio,
-    save_audio,
-    process_audio,
     evaluate_model,
+    load_audio,
+    process_audio,
+    save_audio,
 )
+from neural_fx.models.recurrent import NeuralfxLSTM
 
 
 class TestStreamingInference:
@@ -120,6 +120,25 @@ class TestStreamingInference:
 
         # Outputs should be different tensors
         assert out1 is not out2
+
+    def test_streaming_processor_accepts_conditioning(self):
+        """Block and sample streaming expose model conditioning controls."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, conditioning_size=1),
+            input_size=1,
+            output_size=1,
+        )
+        processor = StreamingProcessor(NeuralfxLSTM(config).eval())
+
+        block = processor.process_block(
+            torch.randn(1, 1, 8), conditioning=torch.tensor([[0.5]])
+        )
+        processor.reset()
+        sample = processor.process_sample(0.1, conditioning=0.5)
+
+        assert block.shape == (1, 1, 8)
+        assert isinstance(sample, float)
 
     def test_load_audio(self, temp_audio_file):
         """Test loading audio from file."""
