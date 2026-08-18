@@ -142,6 +142,8 @@ def benchmark_model(
     block_sizes = block_sizes or [64, 128, 256, 512]
     if any(size <= 0 for size in block_sizes):
         raise ValueError("block sizes must be positive")
+    if any(size > num_samples for size in block_sizes):
+        raise ValueError("block sizes cannot exceed num_samples")
 
     parameter = next(model.parameters(), None)
     device = parameter.device if parameter is not None else torch.device("cpu")

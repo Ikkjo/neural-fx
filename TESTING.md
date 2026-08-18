@@ -44,8 +44,8 @@ pytest --run-onnx tests/test_export.py tests/test_wavenet.py
 
 The default suite skips ONNX export tests. The exporter is a heavyweight,
 optional toolchain and is tracked separately from the core training and
-inference suite. Use `--run-onnx` after installing the ONNX dependencies when
-working on export support.
+inference suite. Install it with `pip install -e ".[onnx]"`, then use
+`--run-onnx` when working on export support.
 
 ### Test Discovery
 

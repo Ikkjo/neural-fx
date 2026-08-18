@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 import torch
 
 from neural_fx.analysis.benchmarking import (
@@ -53,6 +54,26 @@ def test_benchmark_model_records_latency_memory_and_deadlines(tmp_path) -> None:
     assert result["blocks"][0]["block_size"] == 32
     assert 0 <= result["blocks"][0]["deadline_misses"] <= 2
     assert result["memory"]["model_state_bytes"] > 0
+
+
+def test_benchmark_model_rejects_blocks_larger_than_workload() -> None:
+    model = NeuralfxGRU(
+        ModelConfig(
+            type="gru",
+            params=LSTMParams(hidden_size=4, num_layers=1),
+            sample_rate=48_000,
+        )
+    )
+
+    with pytest.raises(ValueError, match="cannot exceed num_samples"):
+        benchmark_model(
+            model,
+            model_name="test_gru",
+            block_sizes=[129],
+            num_samples=128,
+            warmup_runs=0,
+            measurement_runs=1,
+        )
 
 
 def test_benchmark_result_round_trip_and_markdown_table(tmp_path) -> None:

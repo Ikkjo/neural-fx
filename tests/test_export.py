@@ -180,23 +180,18 @@ class TestModelExport:
             assert "layers" in data
             assert len(data["layers"]) >= 2  # At least RNN + Dense
 
-    def test_rtneural_export_lstm_with_conv(self, lstm_with_conv_config):
-        """Test RTNeural JSON export includes conv layers."""
+    def test_rtneural_export_rejects_strided_recurrent_graph(
+        self, lstm_with_conv_config
+    ):
+        """RTNeural must not emit an ordinary Conv1D for required upsampling."""
         model = NeuralfxLSTM(lstm_with_conv_config)
-        model.eval()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            export_path = Path(tmpdir) / "model.json"
-            model.export_rtneural(export_path)
-
-            with open(export_path) as f:
-                data = json.load(f)
-
-            # Should have conv1d, lstm, dense, convtranspose
-            layer_types = [layer["type"] for layer in data["layers"]]
-            assert "conv1d" in layer_types
-            assert "lstm" in layer_types
-            assert "dense" in layer_types
+            assert model.supported_export_formats == ("onnx", "torchscript")
+            with pytest.raises(
+                NotImplementedError, match="ConvTranspose1d upsampling"
+            ):
+                model.export_rtneural(Path(tmpdir) / "model.json")
 
     def test_rtneural_export_gru(self, gru_config):
         """Test RTNeural JSON export for GRU."""
@@ -332,5 +327,20 @@ class TestModelExport:
 
         assert model.supported_export_formats == ("onnx", "torchscript")
         with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(NotImplementedError, match="does not support conditioned"):
+            with pytest.raises(NotImplementedError, match="unsupported control input"):
+                model.export_rtneural(Path(tmpdir) / "model.json")
+
+    def test_skip_connection_rtneural_export_is_rejected(self):
+        """Sequential RTNeural JSON cannot encode the model residual branch."""
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, skip_connection=True),
+            input_size=1,
+            output_size=1,
+        )
+        model = NeuralfxLSTM(config)
+
+        assert model.supported_export_formats == ("onnx", "torchscript")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(NotImplementedError, match="residual graph"):
                 model.export_rtneural(Path(tmpdir) / "model.json")

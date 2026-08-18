@@ -9,6 +9,7 @@ setup(
     install_requires=[
         "torch>=2.11,<2.12",
         "torchaudio>=2.11,<2.12",
+        "torchcodec>=0.11.1,<0.17",
         "numpy",
         "scipy",
         "tqdm",
@@ -23,6 +24,10 @@ setup(
             "pytest-cov>=6,<8",
             "pytest-xdist>=3,<4",
             "ruff>=0.11,<0.17",
+        ],
+        "onnx": [
+            "onnx>=1.17,<2",
+            "onnxruntime>=1.19,<2",
         ],
     },
 )

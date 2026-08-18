@@ -315,9 +315,25 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
     @property
     def supported_export_formats(self) -> tuple[str, ...]:
         formats = ("onnx", "torchscript")
-        if self.params.conditioning_size == 0:
+        if self._rtneural_unsupported_reason() is None:
             return (*formats, "rtneural")
         return formats
+
+    def _rtneural_unsupported_reason(self) -> str | None:
+        """Explain why this recurrent graph cannot be represented sequentially."""
+        if self.params.conditioning_size > 0:
+            return "conditioned recurrent models require an unsupported control input"
+        if self.conv_transpose is not None:
+            return (
+                "strided recurrent models require ConvTranspose1d upsampling, which "
+                "the current RTNeural JSON graph cannot represent"
+            )
+        if self.params.skip_connection:
+            return (
+                "recurrent skip connections require a residual graph, which the "
+                "current RTNeural JSON graph cannot represent"
+            )
+        return None
 
     def export_onnx(self, path: str | Path, opset_version: int = 17) -> None:
         """Export model to ONNX format."""
@@ -384,10 +400,9 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
     def export_rtneural(self, path: str | Path) -> None:
         """Export model to RTNeural JSON format."""
-        if self.params.conditioning_size > 0:
-            raise UnsupportedExportError(
-                "RTNeural export does not support conditioned recurrent models"
-            )
+        unsupported_reason = self._rtneural_unsupported_reason()
+        if unsupported_reason is not None:
+            raise UnsupportedExportError(f"RTNeural export rejected: {unsupported_reason}")
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -413,11 +428,6 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         # Add Dense output layer
         dense_layer = self._export_rtneural_dense()
         model_dict["layers"].append(dense_layer)
-
-        # Add ConvTranspose if present
-        if self.conv_transpose is not None:
-            convt_layer = self._export_rtneural_convtranspose()
-            model_dict["layers"].append(convt_layer)
 
         with open(path, "w") as f:
             json.dump(model_dict, f, indent=2)
@@ -526,33 +536,6 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         bias_rtneural = bias.cpu().numpy().tolist()
 
         layer_dict["weights"] = [weight_rtneural, bias_rtneural]
-        return layer_dict
-
-    def _export_rtneural_convtranspose(self) -> dict[str, Any]:
-        """Export ConvTranspose1d as Conv1d for RTNeural compatibility.
-
-        RTNeural doesn't have a native ConvTranspose1d layer, so we export
-        it as a Conv1d layer with appropriate weight permutation.
-        """
-        layer_dict: dict[str, Any] = {
-            "type": "conv1d",
-            "activation": "",
-            "shape": [None, None, self.conv_transpose.out_channels],
-            "kernel_size": self.conv_transpose.kernel_size[0],
-            "dilation": 1,
-            "groups": 1,
-            "weights": [],
-        }
-
-        weight = self.conv_transpose.weight.data
-        weight_rtneural = weight.permute(2, 1, 0).cpu().numpy().tolist()
-        bias = (
-            self.conv_transpose.bias.data.cpu().numpy().tolist()
-            if self.conv_transpose.bias is not None
-            else [0.0] * self.conv_transpose.out_channels
-        )
-
-        layer_dict["weights"] = [weight_rtneural, bias]
         return layer_dict
 
     @classmethod

@@ -28,6 +28,12 @@ For development, install the test and lint tools as well:
 pip install -e ".[dev]"
 ```
 
+Install the optional ONNX toolchain when exporting or validating ONNX models:
+
+```bash
+pip install -e ".[onnx]"
+```
+
 ### Training a Model
 
 ```bash
@@ -56,7 +62,7 @@ every training batch. The default interval is 50 steps.
 ### Exporting a Trained Model
 
 ```bash
-# Export to all formats (ONNX, TorchScript, RTNeural)
+# Export every format supported by this model
 python scripts/export.py \
     --config configs/models/lstm/lstm_medium.yaml \
     --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
@@ -68,6 +74,11 @@ python scripts/export.py \
     --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
     --formats onnx,torchscript
 ```
+
+The shipped LSTM/GRU configs use strided convolution and support ONNX and
+TorchScript export. RTNeural JSON is limited to unconditioned recurrent+dense
+graphs without strided upsampling or residual skip connections; unsupported
+formats are skipped with an explanation.
 
 ## Model Configurations
 
@@ -219,8 +230,8 @@ neural-fx/
 │   ├── models/             # Model implementations
 │   │   ├── base.py         # Base model interface
 │   │   ├── recurrent.py    # LSTM/GRU implementations
-│   │   ├── wavenet.py      # WaveNet (future)
-│   │   └── ssm.py          # SSM/Mamba/S4 (future)
+│   │   ├── wavenet.py      # Causal WaveNet
+│   │   └── ssm.py          # Portable S4D
 │   ├── training/           # Training infrastructure
 │   │   └── lightning_module.py  # LightningModule with TBPTT
 │   ├── losses/             # Loss functions
@@ -229,7 +240,9 @@ neural-fx/
 │       └── streaming.py    # Real-time processing
 ├── configs/models/         # Model configurations
 │   ├── lstm/               # LSTM configs (nano/small/medium/large/xl)
-│   └── gru/                # GRU configs (nano/small/medium/large/xl)
+│   ├── gru/                # GRU configs (nano/small/medium/large/xl)
+│   ├── wavenet/            # WaveNet configs
+│   └── s4/                 # S4D configs
 ├── scripts/                # Entry-point scripts
 │   ├── train.py            # Training script
 │   └── export.py           # Model export script
@@ -247,7 +260,7 @@ This project uses `pytest` for testing.
 pytest tests/
 
 # Run optional ONNX export tests
-pytest --run-onnx tests/test_export.py
+pytest --run-onnx tests/test_export.py tests/test_wavenet.py
 
 # Run specific test file
 pytest tests/test_recurrent.py -v

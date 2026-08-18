@@ -28,11 +28,34 @@ jobs:
         run: >-
           python -m pip install
           --index-url https://download.pytorch.org/whl/cpu
-          "torch==2.11.*" "torchaudio==2.11.*"
+          "torch==2.11.*" "torchaudio==2.11.*" "torchcodec>=0.11.1,<0.17"
       - name: Install neural-fx and test dependencies
         run: python -m pip install -e ".[dev]"
+      - name: Verify installed dependencies
+        run: python -m pip check
       - name: Run core test suite
         run: pytest tests
+
+  onnx:
+    name: ONNX / Python 3.12 / Torch 2.11 CPU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install PyTorch CPU runtime
+        run: >-
+          python -m pip install
+          --index-url https://download.pytorch.org/whl/cpu
+          "torch==2.11.*" "torchaudio==2.11.*" "torchcodec>=0.11.1,<0.17"
+      - name: Install neural-fx and ONNX dependencies
+        run: python -m pip install -e ".[dev,onnx]"
+      - name: Verify installed dependencies
+        run: python -m pip check
+      - name: Run ONNX Runtime export tests
+        run: pytest --run-onnx tests/test_export.py tests/test_wavenet.py
 
   lint:
     name: Ruff
