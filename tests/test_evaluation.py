@@ -1,0 +1,135 @@
+"""Tests for controlled model evaluation."""
+
+import json
+from pathlib import Path
+
+import torch
+import yaml
+from scipy.io import wavfile
+
+from neural_fx.analysis.evaluation import (
+    build_comparison_report,
+    evaluate_experiment,
+    load_experiment_manifest,
+    write_evaluation_result,
+)
+from neural_fx.config import LSTMParams, ModelConfig
+from neural_fx.models.recurrent import NeuralfxGRU
+
+
+def _write_test_config(path: Path) -> None:
+    config = {
+        "version": "1.0",
+        "name": "test_gru",
+        "model": {
+            "type": "gru",
+            "input_size": 1,
+            "output_size": 1,
+            "sample_rate": 48_000,
+            "params": {"hidden_size": 4, "num_layers": 1},
+        },
+        "training": {"batch_size": 1, "epochs": 1, "segment_length": 4096},
+        "optimizer": {"type": "adam", "lr": 0.001},
+        "lr_scheduler": {"type": "exponential", "gamma": 0.99},
+        "loss": {"type": "mse", "mask_first": 64},
+        "data": {"train": {"input": "unused.wav", "target": "unused.wav"}},
+    }
+    path.write_text(yaml.safe_dump(config))
+
+
+def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    checkpoint_path = tmp_path / "model.pt"
+    input_path = tmp_path / "input.wav"
+    target_path = tmp_path / "target.wav"
+    manifest_path = tmp_path / "manifest.yaml"
+    _write_test_config(config_path)
+    model = NeuralfxGRU(
+        ModelConfig(type="gru", params=LSTMParams(hidden_size=4, num_layers=1))
+    )
+    torch.save(model.state_dict(), checkpoint_path)
+    time = torch.arange(4096) / 48_000
+    input_audio = torch.sin(2 * torch.pi * 220 * time).numpy().astype("float32")
+    wavfile.write(input_path, 48_000, input_audio)
+    wavfile.write(target_path, 48_000, (input_audio * 0.5).astype("float32"))
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "experiment_id": "test-gru",
+                "run_kind": "smoke",
+                "model": {"config": "config.yaml", "checkpoint": "model.pt"},
+                "dataset": {
+                    "input_audio": "input.wav",
+                    "target_audio": "target.wav",
+                    "split": "test",
+                    "num_samples": 4096,
+                },
+                "training": {"seed": 7, "epochs": 1},
+            }
+        )
+    )
+
+    manifest = load_experiment_manifest(manifest_path)
+    result = evaluate_experiment(manifest, tmp_path / "result")
+    write_evaluation_result(result, tmp_path / "result" / "evaluation.json")
+
+    assert result["run_kind"] == "smoke"
+    assert set(result["metrics"]) == {
+        "esr",
+        "mse",
+        "correlation",
+        "multi_resolution_stft_distance",
+    }
+    assert result["dataset"]["evaluated_samples"] == 4096
+    assert result["dataset"]["mask_first"] == 64
+    assert result["dataset"]["metric_samples"] == 4032
+    assert all(Path(path).exists() for path in result["artifacts"].values())
+    assert json.loads((tmp_path / "result" / "evaluation.json").read_text())[
+        "experiment_id"
+    ] == "test-gru"
+
+
+def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> None:
+    def result(experiment: str, parameters: int, model_type: str) -> dict:
+        return {
+            "experiment_id": experiment,
+            "run_kind": "smoke",
+            "sources": {
+                "manifest": "/manifest.yaml",
+                "config": "/config.yaml",
+                "checkpoint": "/model.ckpt",
+            },
+            "model": {
+                "type": model_type,
+                "name": experiment,
+                "trainable_parameters": parameters,
+            },
+            "metrics": {
+                "esr": 1.0,
+                "mse": 0.5,
+                "correlation": 0.0,
+                "multi_resolution_stft_distance": 2.0,
+            },
+            "dataset": {
+                "input_audio": "/input.wav",
+                "target_audio": "/target.wav",
+                "split": "test",
+                "start_sample": 0,
+                "evaluated_samples": 4096,
+                "sample_rate": 48_000,
+                "latency_samples": 0,
+                "normalization": "paired_peak",
+            },
+            "performance": None,
+        }
+
+    report, markdown = build_comparison_report(
+        [result("lstm", 1000, "lstm"), result("gru", 1200, "gru")],
+        size_tolerance=1.25,
+    )
+
+    assert report["interpretation"] == "workflow_validation_only"
+    assert report["size_groups"][0]["experiments"] == ["lstm", "gru"]
+    assert "must not be used as a final quality ranking" in markdown
+    assert "[checkpoint](/model.ckpt)" in markdown
