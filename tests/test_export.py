@@ -1,16 +1,16 @@
 import json
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import torch
 import pytest
+import torch
 
-from neural_fx.config import ModelConfig, LSTMParams, Conv1dConfig
-from neural_fx.models.recurrent import NeuralfxLSTM, NeuralfxGRU
+from neural_fx.config import Conv1dConfig, LSTMParams, ModelConfig
+from neural_fx.models.recurrent import NeuralfxGRU, NeuralfxLSTM
 
 
 class TestModelExport:
@@ -73,6 +73,7 @@ class TestModelExport:
             sample_rate=48000,
         )
 
+    @pytest.mark.onnx
     def test_onnx_export_simple_lstm(self, simple_lstm_config):
         """Test ONNX export for simple LSTM model."""
         model = NeuralfxLSTM(simple_lstm_config)
@@ -85,6 +86,7 @@ class TestModelExport:
             assert export_path.exists()
             assert export_path.stat().st_size > 0
 
+    @pytest.mark.onnx
     def test_onnx_export_lstm_with_conv(self, lstm_with_conv_config):
         """Test ONNX export for LSTM with convolution."""
         model = NeuralfxLSTM(lstm_with_conv_config)
@@ -208,6 +210,7 @@ class TestModelExport:
                 # Weights should be non-empty
                 assert len(layer["weights"]) > 0
 
+    @pytest.mark.onnx
     def test_export_creates_directories(self, simple_lstm_config):
         """Test that export creates parent directories if needed."""
         model = NeuralfxLSTM(simple_lstm_config)

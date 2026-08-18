@@ -21,6 +21,12 @@ cd neural-fx
 pip install -e .
 ```
 
+For development, install the test and lint tools as well:
+
+```bash
+pip install -e ".[dev]"
+```
+
 ### Training a Model
 
 ```bash
@@ -211,6 +217,9 @@ This project uses `pytest` for testing.
 ```bash
 # Run all tests
 pytest tests/
+
+# Run optional ONNX export tests
+pytest --run-onnx tests/test_export.py
 
 # Run specific test file
 pytest tests/test_recurrent.py -v
