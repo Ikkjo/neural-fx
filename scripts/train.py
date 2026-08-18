@@ -7,7 +7,6 @@ from pathlib import Path
 
 import lightning as L
 import torch
-from lightning.pytorch.loggers import CSVLogger
 
 from neural_fx.config import load_config
 from neural_fx.data.dataset import AudioDataset
@@ -16,6 +15,7 @@ from neural_fx.preprocessing.latency import LatencyCalibrator
 from neural_fx.preprocessing.validation import DataValidator
 from neural_fx.training.callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
 from neural_fx.training.lightning_module import NeuralFXModule
+from neural_fx.training.logging import create_training_loggers
 
 
 def run_latency_calibration(config, input_path: str, target_path: str):
@@ -113,6 +113,12 @@ def main():
         type=float,
         default=1.0,
         help="Validation check interval (fraction of epoch)",
+    )
+    parser.add_argument(
+        "--log_every_n_steps",
+        type=int,
+        default=50,
+        help="Write live CSV and TensorBoard metrics every N training steps",
     )
     parser.add_argument(
         "--cpu", action="store_true", help="Force CPU training even if GPU is available"
@@ -240,11 +246,8 @@ def main():
     # Determine device
     use_gpu = not args.cpu and args.gpus > 0 and torch.cuda.is_available()
 
-    # Setup logger - use CSVLogger to avoid TensorBoard -1 value issues
-    logger = CSVLogger(
-        save_dir=args.checkpoint_dir,
-        name=config.name,
-    )
+    # Keep machine-readable CSV metrics and live TensorBoard events together.
+    loggers = create_training_loggers(args.checkpoint_dir, config.name)
 
     # Setup trainer kwargs
     trainer_kwargs = {
@@ -255,7 +258,8 @@ def main():
         "gradient_clip_val": 1.0,
         "enable_progress_bar": True,
         "val_check_interval": args.val_check_interval,
-        "logger": logger,
+        "logger": loggers,
+        "log_every_n_steps": args.log_every_n_steps,
     }
 
     # Add validation if available

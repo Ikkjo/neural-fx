@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
+
+
+class UnsupportedExportError(NotImplementedError):
+    """Raised when a model cannot represent an export format faithfully."""
 
 
 class BaseNeuralFXModel(nn.Module, ABC):
@@ -28,7 +31,7 @@ class BaseNeuralFXModel(nn.Module, ABC):
 
     def detach_state(self) -> None:
         """Detach state from computation graph for TBPTT."""
-        pass  # Override in stateful models
+        # Override in stateful models
 
     # Validation
     @abstractmethod
@@ -39,7 +42,7 @@ class BaseNeuralFXModel(nn.Module, ABC):
     # Properties
     @property
     @abstractmethod
-    def receptive_field(self) -> int:
+    def receptive_field(self) -> int | float:
         """Number of past samples the model depends on."""
         ...
 
@@ -52,13 +55,24 @@ class BaseNeuralFXModel(nn.Module, ABC):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     @property
+    def model_size_bytes(self) -> int:
+        """Return the storage used by parameters and persistent buffers."""
+        tensors = list(self.parameters()) + list(self.buffers())
+        return sum(tensor.numel() * tensor.element_size() for tensor in tensors)
+
+    @property
+    def supported_export_formats(self) -> tuple[str, ...]:
+        """Return export formats that this model implements faithfully."""
+        return ("onnx", "torchscript", "rtneural")
+
+    @property
     def has_state(self) -> bool:
         return True  # Override if stateless
 
     # Factory
     @classmethod
     @abstractmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BaseNeuralFXModel":
+    def from_config(cls, config: dict[str, Any]) -> "BaseNeuralFXModel":
         """Create model from configuration dictionary."""
         ...
 

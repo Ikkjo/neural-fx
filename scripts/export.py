@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from neural_fx.config import load_config
-from neural_fx.models.recurrent import RecurrentNeuralFXModel
+from neural_fx.models import create_model_from_config
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    model = RecurrentNeuralFXModel.from_config(config.model)
+    model = create_model_from_config(config.model)
 
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
     state_dict = checkpoint.get("state_dict", checkpoint)
@@ -54,6 +54,14 @@ def main():
     formats = [f.strip().lower() for f in args.formats.split(",")]
 
     for fmt in formats:
+        if fmt not in model.supported_export_formats:
+            supported = ", ".join(model.supported_export_formats)
+            print(
+                f"Skipping unsupported {fmt} export for {config.model.type}; "
+                f"supported formats: {supported or 'none'}"
+            )
+            continue
+
         if fmt == "onnx":
             output_path = output_dir / f"{config.name}.onnx"
             model.export_onnx(output_path)

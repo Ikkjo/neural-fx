@@ -14,6 +14,7 @@ setup(
         "tqdm",
         "matplotlib",
         "lightning",
+        "tensorboard",
         "pyyaml",
     ],
     extras_require={
