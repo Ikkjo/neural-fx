@@ -64,6 +64,7 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
                     "target_audio": "target.wav",
                     "split": "test",
                     "num_samples": 4096,
+                    "metric_mask_first": 128,
                 },
                 "training": {"seed": 7, "epochs": 1},
             }
@@ -82,8 +83,9 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
         "multi_resolution_stft_distance",
     }
     assert result["dataset"]["evaluated_samples"] == 4096
-    assert result["dataset"]["mask_first"] == 64
-    assert result["dataset"]["metric_samples"] == 4032
+    assert result["dataset"]["mask_first"] == 128
+    assert result["dataset"]["configured_loss_mask_first"] == 64
+    assert result["dataset"]["metric_samples"] == 3968
     assert all(Path(path).exists() for path in result["artifacts"].values())
     assert json.loads((tmp_path / "result" / "evaluation.json").read_text())[
         "experiment_id"

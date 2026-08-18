@@ -140,7 +140,9 @@ def evaluate_experiment(
     if common_length < 2048:
         raise ValueError("Evaluation segment must contain at least 2048 samples")
 
-    mask_first = config.loss.mask_first
+    mask_first = int(
+        manifest["dataset"].get("metric_mask_first", config.loss.mask_first)
+    )
     if mask_first < 0 or mask_first >= common_length:
         raise ValueError(
             f"loss.mask_first ({mask_first}) must be smaller than the evaluation segment ({common_length})"
@@ -225,6 +227,7 @@ def evaluate_experiment(
             **manifest["dataset"],
             "evaluated_samples": common_length,
             "mask_first": mask_first,
+            "configured_loss_mask_first": config.loss.mask_first,
             "metric_samples": metric_prediction.shape[-1],
             "sample_rate": config.sample_rate,
         },

@@ -53,6 +53,8 @@ dataset:
   num_samples: 144000
   latency_samples: 0
   normalization: paired_peak
+  # Optional shared comparison window; defaults to checkpoint loss.mask_first.
+  metric_mask_first: 4096
 training:
   seed: 42
   epochs: 100
@@ -82,5 +84,7 @@ The report labels any comparison containing a smoke run as workflow validation.
 Only complete, controlled runs should use `run_kind: final`.
 
 Evaluation uses the same paired normalization and latency-compensation behavior as
-training. Quality metrics exclude `loss.mask_first` samples and use the configured
-ESR pre-emphasis setting; listening files retain the full aligned segment.
+training. By default, quality metrics exclude `loss.mask_first` samples and use the
+configured ESR pre-emphasis setting; listening files retain the full aligned segment.
+Set `dataset.metric_mask_first` in every manifest when models have different
+training masks but must be compared over one identical metric window.
