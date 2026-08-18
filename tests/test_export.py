@@ -290,6 +290,35 @@ class TestModelExport:
 
         torch.testing.assert_close(actual, expected)
 
+    @pytest.mark.onnx
+    def test_conditioned_onnx_export(self):
+        """ONNX deployment keeps conditioning as an explicit input."""
+        onnxruntime = pytest.importorskip("onnxruntime")
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=4, conditioning_size=1),
+            input_size=1,
+            output_size=1,
+        )
+        model = NeuralfxLSTM(config).eval()
+        x = torch.randn(2, 1, 12)
+        conditioning = torch.tensor([[0.2], [0.8]])
+        with torch.no_grad():
+            expected = model(x, conditioning=conditioning, reset_state=True).numpy()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_path = Path(tmpdir) / "conditioned.onnx"
+            model.export_onnx(export_path)
+            session = onnxruntime.InferenceSession(
+                str(export_path), providers=["CPUExecutionProvider"]
+            )
+            actual = session.run(
+                None,
+                {"input": x.numpy(), "conditioning": conditioning.numpy()},
+            )[0]
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-4, atol=1e-5)
+
     def test_conditioned_rtneural_export_is_rejected(self):
         """RTNeural does not silently emit a model with a missing control input."""
         config = ModelConfig(
@@ -299,6 +328,9 @@ class TestModelExport:
             output_size=1,
         )
 
+        model = NeuralfxLSTM(config)
+
+        assert model.supported_export_formats == ("onnx", "torchscript")
         with tempfile.TemporaryDirectory() as tmpdir:
             with pytest.raises(NotImplementedError, match="does not support conditioned"):
-                NeuralfxLSTM(config).export_rtneural(Path(tmpdir) / "model.json")
+                model.export_rtneural(Path(tmpdir) / "model.json")

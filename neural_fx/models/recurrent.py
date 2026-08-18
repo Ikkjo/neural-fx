@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ..config import LSTMParams, ModelConfig, _load_model_params
-from .base import BaseNeuralFXModel
+from .base import BaseNeuralFXModel, UnsupportedExportError
 
 
 class _RecurrentExportWrapper(nn.Module):
@@ -312,6 +312,13 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
                 rf = rf * self.params.conv1d.stride  # Approximate
         return rf
 
+    @property
+    def supported_export_formats(self) -> tuple[str, ...]:
+        formats = ("onnx", "torchscript")
+        if self.params.conditioning_size == 0:
+            return (*formats, "rtneural")
+        return formats
+
     def export_onnx(self, path: str | Path, opset_version: int = 17) -> None:
         """Export model to ONNX format."""
         path = Path(path)
@@ -378,7 +385,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
     def export_rtneural(self, path: str | Path) -> None:
         """Export model to RTNeural JSON format."""
         if self.params.conditioning_size > 0:
-            raise NotImplementedError(
+            raise UnsupportedExportError(
                 "RTNeural export does not support conditioned recurrent models"
             )
 
