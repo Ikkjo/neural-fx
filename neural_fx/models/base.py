@@ -42,7 +42,7 @@ class BaseNeuralFXModel(nn.Module, ABC):
     # Properties
     @property
     @abstractmethod
-    def receptive_field(self) -> int:
+    def receptive_field(self) -> int | float:
         """Number of past samples the model depends on."""
         ...
 

@@ -1,0 +1,35 @@
+version: "1.0"
+name: "s4_nano"
+
+model:
+  type: "s4"
+  input_size: 1
+  output_size: 1
+  sample_rate: 48000
+  params:
+    d_model: 8
+    d_state: 8
+    num_layers: 2
+    dropout: 0.0
+
+training:
+  batch_size: 16
+  epochs: 100
+  segment_length: 8192
+  num_workers: 4
+
+optimizer:
+  type: "adamw"
+  lr: 0.001
+
+lr_scheduler:
+  type: "exponential"
+  gamma: 0.995
+
+loss:
+  type: "mse"
+
+data:
+  train:
+    input: "data/DI.wav"
+    target: "data/effect.wav"

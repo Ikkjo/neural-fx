@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal
 
 import yaml
 
@@ -60,9 +60,12 @@ class SSMParams:
     d_state: int = 16
     d_conv: int = 4
     expand: int = 2
+    d_model: int = 16
+    num_layers: int = 4
+    dropout: float = 0.0
 
 
-ModelParamsType = Union[LSTMParams, WaveNetParams, SSMParams]
+ModelParamsType = LSTMParams | WaveNetParams | SSMParams
 
 # =============================================================================
 # SHARED CONFIG SECTIONS

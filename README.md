@@ -4,7 +4,7 @@ Real-time guitar effect and amp modelling using neural networks (LSTM, GRU, Wave
 
 ## Features
 
-- **Model Architectures**: LSTM, GRU, and causal WaveNet with configurable sizes
+- **Model Architectures**: LSTM, GRU, causal WaveNet, and portable S4D
 - **Audio Processing**: 48kHz sample rate, chunked processing for memory efficiency
 - **Training**: PyTorch Lightning with TBPTT (Truncated Backpropagation Through Time) and burn-in support
 - **Live metrics**: CSV and TensorBoard logs written to the same training run directory
@@ -33,6 +33,9 @@ python scripts/train.py --config configs/models/gru/gru_medium.yaml
 
 # Train a causal WaveNet
 python scripts/train.py --config configs/models/wavenet/wavenet_small.yaml
+
+# Train the portable diagonal state-space model
+python scripts/train.py --config configs/models/s4/s4_small.yaml
 
 # Train with custom epochs
 python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epochs 50
@@ -88,6 +91,14 @@ WaveNet configurations use repeated dilation cycles. Its exact receptive field i
 `1 + (kernel_size - 1) * stacks * (2**layers - 1)` samples. Full-sequence,
 chunked, and cached sample inference are causal. TorchScript and ONNX export are
 supported; the current RTNeural JSON format cannot represent the WaveNet graph.
+
+### S4D Models
+
+The `s4` model type uses a stable diagonal state-space layer implemented with
+core PyTorch. Training uses causal FFT convolution, while block and sample
+inference carry recurrent states. Its memory is theoretically unbounded.
+TorchScript export produces a recurrent cell with explicit state input/output;
+ONNX and RTNeural cannot currently represent the required state-space graph.
 
 ## Using NAM-Style Test Signals
 
