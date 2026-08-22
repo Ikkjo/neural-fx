@@ -342,21 +342,3 @@ class DataValidator:
             message=f"Good signal level (input_rms={input_rms:.4f}, output_rms={output_rms:.4f})",
             value=min_rms,
         )
-
-
-def create_data_validator(
-    check_clipping: bool = True,
-    check_dc_offset: bool = True,
-) -> DataValidator:
-    """Factory function to create a DataValidator instance.
-
-    Args:
-        check_clipping: Whether to check for clipping.
-        check_dc_offset: Whether to check for DC offset.
-    Returns:
-        DataValidator instance.
-    """
-    return DataValidator(
-        check_clipping=check_clipping,
-        check_dc_offset=check_dc_offset,
-    )

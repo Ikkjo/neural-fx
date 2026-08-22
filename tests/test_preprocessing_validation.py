@@ -15,7 +15,6 @@ from neural_fx.preprocessing.validation import (
     CheckResult,
     DataValidator,
     ValidationReport,
-    create_data_validator,
 )
 
 
@@ -114,15 +113,6 @@ class TestDataValidator:
         assert validator is not None
         assert validator.check_clipping is True
         assert validator.check_dc_offset is True
-
-    def test_create_data_validator_factory(self):
-        """Test factory function creates validator."""
-        validator = create_data_validator(
-            check_clipping=True,
-            check_dc_offset=False,
-        )
-        assert isinstance(validator, DataValidator)
-        assert validator.check_dc_offset is False
 
     def test_files_exist_check(self, temp_audio_files):
         """Test files exist check."""

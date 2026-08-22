@@ -65,11 +65,6 @@ class BaseNeuralFXModel(nn.Module, ABC):
         """Return export formats that this model implements faithfully."""
         return ("onnx", "torchscript", "rtneural")
 
-    @property
-    def has_state(self) -> bool:
-        return True  # Override if stateless
-
-    # Factory
     @classmethod
     @abstractmethod
     def from_config(cls, config: dict[str, Any]) -> "BaseNeuralFXModel":

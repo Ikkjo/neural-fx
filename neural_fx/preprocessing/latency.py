@@ -240,8 +240,3 @@ class LatencyCalibrator:
             Tuple of (compensated_input, compensated_output).
         """
         return self.apply_delay(input_audio, output_audio, calibration.delay_samples)
-
-
-def create_latency_calibrator() -> LatencyCalibrator:
-    """Factory function to create a LatencyCalibrator instance."""
-    return LatencyCalibrator()

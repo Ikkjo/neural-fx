@@ -14,7 +14,6 @@ import torchaudio
 from neural_fx.preprocessing.latency import (
     LatencyCalibration,
     LatencyCalibrator,
-    create_latency_calibrator,
 )
 
 
@@ -80,11 +79,6 @@ class TestLatencyCalibration:
         """Test LatencyCalibrator can be created."""
         calibrator = LatencyCalibrator()
         assert calibrator is not None
-
-    def test_create_latency_calibrator_factory(self):
-        """Test factory function creates calibrator."""
-        calibrator = create_latency_calibrator()
-        assert isinstance(calibrator, LatencyCalibrator)
 
     def test_xcorr_calibration(self, temp_tensors):
         """Test xcorr method detects delay."""

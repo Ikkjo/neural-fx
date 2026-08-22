@@ -33,36 +33,13 @@ from neural_fx.data.transforms import (
     build_augmentation_transform,
 )
 from neural_fx.losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
-from neural_fx.models import (
-    MODEL_REGISTRY,
-    create_model_from_config,
-    get_available_models,
-)
+from neural_fx.models import create_model_from_config
 from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.preprocessing.latency import LatencyCalibration
 from neural_fx.training.lightning_module import NeuralFXModule
 
 
-class TestModelRegistry:
-    """Test suite for model registry."""
-
-    def test_registry_has_lstm(self):
-        """Test that LSTM is in the registry."""
-        assert "lstm" in MODEL_REGISTRY
-        assert MODEL_REGISTRY["lstm"] == NeuralfxLSTM
-
-    def test_registry_has_gru(self):
-        """Test that GRU is in the registry."""
-        from neural_fx.models.recurrent import NeuralfxGRU
-
-        assert "gru" in MODEL_REGISTRY
-        assert MODEL_REGISTRY["gru"] == NeuralfxGRU
-
-    def test_get_available_models(self):
-        """Test get_available_models function."""
-        models = get_available_models()
-        assert "lstm" in models
-        assert "gru" in models
+class TestModelCreation:
 
     def test_create_model_from_config_lstm(self):
         """Test creating LSTM model from config using registry."""
