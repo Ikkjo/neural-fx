@@ -4,11 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List
 
-import numpy as np
 import torchaudio
 from torch import Tensor
-
-from ..losses.audio_losses import ESR
 
 
 @dataclass
@@ -69,10 +66,8 @@ class DataValidator:
         self,
         check_clipping: bool = True,
         check_dc_offset: bool = True,
-        check_replicability: bool = True,
         clipping_threshold: float = 0.99,
         dc_offset_threshold: float = 0.01,
-        esr_threshold: float = 0.1,
     ):
         """Initialize validator with check parameters.
 
@@ -81,14 +76,11 @@ class DataValidator:
             check_dc_offset: Whether to check for DC offset.
             clipping_threshold: Threshold for clipping detection (0-1).
             dc_offset_threshold: Threshold for DC offset detection.
-            esr_threshold: Threshold for replicability ESR check.
         """
         self.check_clipping = check_clipping
         self.check_dc_offset = check_dc_offset
         self.clipping_threshold = clipping_threshold
         self.dc_offset_threshold = dc_offset_threshold
-        self.esr_threshold = esr_threshold
-        self.check_replicability = check_replicability
 
     def validate(
         self, input_path: str | Path, output_path: str | Path
@@ -167,18 +159,7 @@ class DataValidator:
             if not checks["output_dc_offset"].passed:
                 warnings.append("Output audio has DC offset")
 
-        # Check 9: Replicability check (ESR between random segments)
-        if self.check_replicability:
-            checks["replicability"] = self._check_replicability(
-                input_audio, output_audio
-            )
-            if not checks["replicability"].passed:
-                warnings.append(
-                    f"Low replicability (ESR={checks['replicability'].value:.4f}) - "
-                    "input/output may not be from same performance"
-                )
-
-        # Check 10: Signal level check
+        # Check 9: Signal level check
         checks["signal_level"] = self._check_signal_level(input_audio, output_audio)
         if not checks["signal_level"].passed:
             warnings.append("Signal level is very low - check audio files")
@@ -331,74 +312,6 @@ class DataValidator:
             passed=True,
             message=f"{name}: No significant DC offset (mean={mean_val:.6f})",
             value=mean_val,
-        )
-
-    def _check_replicability(
-        self, input_audio: Tensor, output_audio: Tensor
-    ) -> CheckResult:
-        """Check replicability by computing ESR between random segments.
-
-        If input and output are from the same performance (aligned),
-        there should be a consistent relationship between them.
-        """
-        # Use random segments for the check
-        min_len = min(input_audio.shape[-1], output_audio.shape[-1])
-        segment_length = min(48000, min_len // 4)  # 1 second or 1/4 of data
-
-        if segment_length < 1024:
-            return CheckResult(
-                passed=False,
-                message="Audio too short for replicability check",
-                value=1.0,
-            )
-
-        # Extract segments from different parts of the audio
-        num_checks = 3
-        esr_values = []
-
-        for i in range(num_checks):
-            start = i * (min_len // num_checks)
-            end = start + segment_length
-
-            if end > min_len:
-                start = min_len - segment_length
-                end = min_len
-
-            input_seg = input_audio[..., start:end]
-            output_seg = output_audio[..., start:end]
-
-            # Ensure same shape for ESR calculation
-            if input_seg.ndim == 2:
-                input_seg = input_seg.mean(dim=0, keepdim=True)
-            if output_seg.ndim == 2:
-                output_seg = output_seg.mean(dim=0, keepdim=True)
-
-            try:
-                esr_val = ESR(input_seg, output_seg).item()
-                esr_values.append(esr_val)
-            except Exception:
-                pass
-
-        if not esr_values:
-            return CheckResult(
-                passed=False, message="Could not compute replicability", value=1.0
-            )
-
-        avg_esr = np.mean(esr_values)
-
-        # Low ESR indicates input and output are similar (good)
-        # High ESR means they're very different (possibly misaligned or wrong files)
-        if avg_esr > self.esr_threshold:
-            return CheckResult(
-                passed=False,
-                message=f"Low replicability: ESR={avg_esr:.4f} (threshold={self.esr_threshold})",
-                value=avg_esr,
-            )
-
-        return CheckResult(
-            passed=True,
-            message=f"Good replicability: ESR={avg_esr:.4f}",
-            value=avg_esr,
         )
 
     def _check_signal_level(

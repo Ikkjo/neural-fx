@@ -64,15 +64,9 @@ def run_data_validation(config, input_path: str, target_path: str, ignore_checks
 
     print("Running data validation...")
 
-    check_replicability = (
-        config.validation.check_replicability
-        if config.validation.check_replicability is not None
-        else False
-    )
     validator = DataValidator(
         check_clipping=config.validation.check_clipping,
         check_dc_offset=config.validation.check_dc_offset,
-        check_replicability=check_replicability,
     )
 
     report = validator.validate(input_path, target_path)

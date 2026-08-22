@@ -254,39 +254,14 @@ class TestDataValidator:
             assert "signal_level" in report.checks
             assert report.checks["signal_level"].passed is False
 
-    def test_replicability_check(self, temp_audio_files):
-        """Test replicability check with matching files."""
+    def test_validation_does_not_compare_dry_and_processed_signals(
+        self, temp_audio_files
+    ):
         input_path, target_path = temp_audio_files
 
-        # Use a higher ESR threshold since input and target have different amplitudes
-        validator = DataValidator(esr_threshold=2.0)
-        report = validator.validate(input_path, target_path)
+        report = DataValidator().validate(input_path, target_path)
 
-        assert "replicability" in report.checks
-        # Target is 0.5 * input, so ESR will be high - just check that the check ran
-        assert report.checks["replicability"].value is not None
-
-    def test_unrelated_audio_replicability(self):
-        """Test replicability check with unrelated files."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-
-            # Create completely unrelated audio
-            input_audio = torch.randn(1, 48000 * 3)
-            target_audio = torch.randn(1, 48000 * 3)
-
-            input_path = tmpdir / "input.wav"
-            target_path = tmpdir / "target.wav"
-
-            torchaudio.save(str(input_path), input_audio, 48000)
-            torchaudio.save(str(target_path), target_audio, 48000)
-
-            validator = DataValidator(esr_threshold=0.1)
-            report = validator.validate(input_path, target_path)
-
-            assert "replicability" in report.checks
-            # Random signals should have high ESR
-            assert report.checks["replicability"].passed is False
+        assert "replicability" not in report.checks
 
     def test_valid_audio_passes(self, temp_audio_files):
         """Test that valid audio passes all checks."""

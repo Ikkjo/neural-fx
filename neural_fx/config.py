@@ -197,7 +197,6 @@ class ValidationConfig:
     enabled: bool = True
     check_clipping: bool = True
     check_dc_offset: bool = True
-    check_replicability: bool | None = None
     ignore_warnings: bool = False
 
 
@@ -294,7 +293,9 @@ def _load_validation_config(val_cfg: dict | None) -> ValidationConfig | None:
     """Load validation configuration from dict."""
     if val_cfg is None:
         return ValidationConfig()  # Return default config
-    return ValidationConfig(**val_cfg)
+    values = dict(val_cfg)
+    values.pop("check_replicability", None)
+    return ValidationConfig(**values)
 
 
 def config_from_dict(d: dict) -> NeuralFXConfig:

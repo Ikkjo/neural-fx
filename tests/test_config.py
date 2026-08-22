@@ -163,3 +163,23 @@ def test_null_conv_config_loads_as_disabled() -> None:
 
     assert isinstance(config.model.params, LSTMParams)
     assert config.model.params.conv1d is None
+
+
+def test_legacy_replicability_setting_is_ignored() -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "legacy_validation",
+            "model": {
+                "type": "lstm",
+                "params": {"hidden_size": 8},
+            },
+            "training": {},
+            "loss": {"type": "mse"},
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+            "validation": {"check_replicability": True},
+        }
+    )
+
+    assert config.validation is not None
+    assert not hasattr(config.validation, "check_replicability")
