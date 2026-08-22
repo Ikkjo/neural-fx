@@ -80,23 +80,18 @@ correlation cover the complete post-burn segment. MR-STFT is the mean from up to
 ten fixed, uniformly placed, non-overlapping three-second windows; the result
 records every window start and value.
 
-Combine the three seed results for every architecture with three fresh benchmark
-processes per representative checkpoint. The architecture report retains all raw
-seed values and reports mean, sample standard deviation, median, minimum, and
-maximum. The median-ESR seed supplies the listening samples and benchmark target.
+Compare evaluation results that use the same aligned dataset segment:
 
 ```bash
 python scripts/compare_evaluations.py results/*/evaluation.json \
-  --benchmarks benchmarks/*.json \
   --output-dir results/comparison \
-  --size-tolerance 1.01
+  --size-tolerance 1.35
 ```
 
-`comparison.json` and `comparison.md` contain the architecture aggregation and
-the preregistered conclusion-rule output. `seed-comparison.json` and
-`seed-comparison.md` retain the per-run view. Missing seeds or benchmarks produce
-an explicit incomplete conclusion. A complete result that fails any quality rule
-states `no clear quality winner under this budget`.
+`comparison.json` and `comparison.md` retain each run's metrics, model size,
+sources, listening samples, and available performance measurements. They group
+models by the configured parameter-count tolerance but do not declare a winner.
+Experiment-specific decision rules belong with the experiment protocol.
 
 Only complete, controlled runs should use `run_kind: final`. Smoke runs validate
 the workflow but do not support a final model ranking.

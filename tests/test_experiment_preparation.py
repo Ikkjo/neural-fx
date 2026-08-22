@@ -1,6 +1,5 @@
-"""Tests for the fixed issue-15 preparation and run contracts."""
+"""Tests for reproducible experiment preparation and training artifacts."""
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,11 +7,8 @@ from unittest.mock import patch
 import pytest
 import torch
 import torchaudio
-import yaml
 
-from neural_fx.config import config_from_dict, load_config
-from neural_fx.experiments.issue15 import generate_issue15_run_files
-from neural_fx.models import create_model_from_config
+from neural_fx.config import config_from_dict
 from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
 from neural_fx.training.callbacks import NeuralFXCheckpoint
 from neural_fx.training.lightning_module import NeuralFXModule
@@ -153,9 +149,7 @@ def test_terminal_checkpoint_overwrites_callback_last_state(tmp_path: Path) -> N
             "model": {"type": "lstm", "params": {"hidden_size": 4}},
             "training": {},
             "loss": {"type": "mse"},
-            "data": {
-                "train": {"input": "input.wav", "target": "target.wav"}
-            },
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
         }
     )
     callback = NeuralFXCheckpoint(config, dirpath=tmp_path)
@@ -167,46 +161,3 @@ def test_terminal_checkpoint_overwrites_callback_last_state(tmp_path: Path) -> N
     assert terminal == tmp_path / "last.ckpt"
     assert callback.last_model_path == str(terminal)
     save_checkpoint.assert_called_once_with(trainer, str(terminal))
-
-
-def test_final_run_generator_writes_matched_reproducible_configs(
-    tmp_path: Path,
-) -> None:
-    dataset_root = tmp_path / "dataset"
-    dataset_root.mkdir()
-    (dataset_root / "dataset-manifest.json").write_text(
-        json.dumps({"schema_version": "1.0", "normalization": "none"})
-    )
-    output = tmp_path / "runs"
-    selected_rates = {"lstm": 0.001, "gru": 0.003, "wavenet": 0.01, "s4": 0.001}
-
-    written = generate_issue15_run_files(
-        dataset_root,
-        output,
-        tmp_path / "checkpoints",
-        selected_learning_rates=selected_rates,
-    )
-
-    assert len(written) == 24
-    expected_parameters = {"lstm": 6_176, "gru": 6_211, "wavenet": 6_161, "s4": 6_161}
-    configs = list((output / "configs").glob("*.yaml"))
-    assert len(configs) == 12
-    for config_path in configs:
-        raw = yaml.safe_load(config_path.read_text())
-        config = load_config(config_path)
-        model = create_model_from_config(config.model)
-        assert raw["training"]["deterministic"] is True
-        assert raw["training"]["early_stopping"] is False
-        assert raw["data"]["normalize"] is False
-        assert config.training.deterministic is True
-        assert config.training.early_stopping is False
-        assert config.data.normalize is False
-        assert model.num_params == expected_parameters[config.model.type]
-
-    with pytest.raises(FileExistsError, match="already exists"):
-        generate_issue15_run_files(
-            dataset_root,
-            output,
-            tmp_path / "checkpoints",
-            selected_learning_rates=selected_rates,
-        )

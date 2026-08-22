@@ -9,6 +9,7 @@ import yaml
 from scipy.io import wavfile
 
 from neural_fx.analysis.evaluation import (
+    ArchitectureComparisonPolicy,
     build_architecture_report,
     build_comparison_report,
     evaluate_experiment,
@@ -19,6 +20,26 @@ from neural_fx.analysis.evaluation import (
 from neural_fx.config import LSTMParams, ModelConfig, SSMParams, WaveNetParams
 from neural_fx.models import create_model_from_config
 from neural_fx.models.recurrent import NeuralfxGRU
+
+
+def _comparison_policy() -> ArchitectureComparisonPolicy:
+    return ArchitectureComparisonPolicy(
+        decision_rule_id="test-policy",
+        required_seeds=(17, 42, 137),
+        required_architectures=("lstm", "gru"),
+        size_tolerance_ratio=1.01,
+        median_esr_relative_improvement=0.05,
+        require_lower_esr_for_all_matched_seeds=True,
+        require_esr_standard_deviation_below_median_gap=True,
+        maximum_median_mse_regression=0.05,
+        maximum_median_mr_stft_regression=0.05,
+        maximum_median_correlation_regression=0.01,
+        minimum_performance_relative_improvement=0.10,
+        require_non_overlapping_performance_ranges=True,
+        real_time_block_size=128,
+        real_time_p95_deadline_fraction=0.80,
+        benchmark_runs_per_device=3,
+    )
 
 
 def _write_test_config(path: Path) -> None:
@@ -101,9 +122,12 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
         "state_reset_count": 1,
     }
     assert all(Path(path).exists() for path in result["artifacts"].values())
-    assert json.loads((tmp_path / "result" / "evaluation.json").read_text())[
-        "experiment_id"
-    ] == "test-gru"
+    assert (
+        json.loads((tmp_path / "result" / "evaluation.json").read_text())[
+            "experiment_id"
+        ]
+        == "test-gru"
+    )
 
 
 def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> None:
@@ -289,7 +313,7 @@ def test_architecture_report_aggregates_seeds_benchmarks_and_conclusions() -> No
     report, markdown = build_architecture_report(
         results,
         benchmarks,
-        required_architectures=("lstm", "gru"),
+        policy=_comparison_policy(),
     )
 
     lstm = report["architectures"][0]
@@ -308,9 +332,12 @@ def test_architecture_report_aggregates_seeds_benchmarks_and_conclusions() -> No
     assert lstm["benchmarks"]["cpu"]["blocks"]["128"]["real_time_capable"]
     assert report["conclusion"]["quality"]["winner"] == "lstm"
     assert report["conclusion"]["performance"]["pareto_winner"] == "lstm"
-    assert report["conclusion"]["performance"]["material_differences"][
-        "cpu_128_sample_p95"
-    ]["winner"] == "lstm"
+    assert (
+        report["conclusion"]["performance"]["material_differences"][
+            "cpu_128_sample_p95"
+        ]["winner"]
+        == "lstm"
+    )
     assert "lstm is the clear quality winner" in markdown
 
 
@@ -326,7 +353,7 @@ def test_architecture_report_refuses_conclusion_for_missing_seed() -> None:
 
     report, _ = build_architecture_report(
         results,
-        required_architectures=("lstm", "gru"),
+        policy=_comparison_policy(),
     )
 
     assert report["architectures"][0]["missing_seeds"] == [137]
@@ -354,7 +381,7 @@ def test_architecture_report_emits_no_clear_winner_when_rule_fails() -> None:
 
     report, markdown = build_architecture_report(
         results,
-        required_architectures=("lstm", "gru"),
+        policy=_comparison_policy(),
     )
 
     quality = report["conclusion"]["quality"]

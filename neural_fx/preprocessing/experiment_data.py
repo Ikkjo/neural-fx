@@ -17,12 +17,6 @@ import torchaudio
 
 MANIFEST_NAME = "dataset-manifest.json"
 MANIFEST_SCHEMA_VERSION = "1.0"
-ISSUE15_INPUT_SHA256 = (
-    "aea90e94cf756e61ac6243998db858437caa41853bb835d1c523f9835a22ac7f"
-)
-ISSUE15_TARGET_SHA256 = (
-    "20227efaa4edb4a7f0f060e7386c5816c7ed3dfcd767943952c8663334014bf8"
-)
 
 
 @dataclass(frozen=True)
@@ -38,15 +32,6 @@ class SplitSpec:
     def end_sample(self) -> int:
         """Return the exclusive end sample."""
         return self.start_sample + self.num_samples
-
-
-ISSUE15_SPLITS = (
-    SplitSpec("train", 0, 29_280_000),
-    SplitSpec("guard_train_val", 29_280_000, 240_000, write_audio=False),
-    SplitSpec("val", 29_520_000, 6_240_000),
-    SplitSpec("guard_val_test", 35_760_000, 240_000, write_audio=False),
-    SplitSpec("test", 36_000_000, 6_240_000),
-)
 
 
 def sha256_file(path: Path) -> str:
@@ -199,6 +184,7 @@ def _preparation_spec(
     target_sample_rate: int,
     target_delay_source_samples: int,
     splits: tuple[SplitSpec, ...],
+    experiment_id: str | None,
 ) -> dict[str, Any]:
     return {
         "input_sha256": input_hash,
@@ -207,6 +193,7 @@ def _preparation_spec(
         "target_delay_source_samples": target_delay_source_samples,
         "splits": [asdict(split) for split in splits],
         "normalization": "none",
+        "experiment_id": experiment_id,
     }
 
 
@@ -244,31 +231,17 @@ def _reuse_existing(output_dir: Path, desired_spec: dict[str, Any]) -> dict[str,
     return manifest
 
 
-def prepare_issue15_dataset(
-    input_path: Path,
-    target_path: Path,
-    output_dir: Path,
-) -> dict[str, Any]:
-    """Prepare issue 15 only when both preregistered source identities match."""
-    return prepare_aligned_audio(
-        input_path,
-        target_path,
-        output_dir,
-        expected_input_sha256=ISSUE15_INPUT_SHA256,
-        expected_target_sha256=ISSUE15_TARGET_SHA256,
-    )
-
-
 def prepare_aligned_audio(
     input_path: Path,
     target_path: Path,
     output_dir: Path,
     *,
+    splits: tuple[SplitSpec, ...],
     target_sample_rate: int = 48_000,
-    target_delay_source_samples: int = 83,
-    splits: tuple[SplitSpec, ...] = ISSUE15_SPLITS,
+    target_delay_source_samples: int = 0,
     expected_input_sha256: str | None = None,
     expected_target_sha256: str | None = None,
+    experiment_id: str | None = None,
 ) -> dict[str, Any]:
     """Prepare one immutable aligned, resampled, and split audio-pair dataset.
 
@@ -302,6 +275,7 @@ def prepare_aligned_audio(
         target_sample_rate,
         target_delay_source_samples,
         splits,
+        experiment_id,
     )
     if output_dir.exists():
         return _reuse_existing(output_dir, desired_spec)
@@ -309,7 +283,7 @@ def prepare_aligned_audio(
     input_audio, input_rate = torchaudio.load(input_path)
     target_audio, target_rate = torchaudio.load(target_path)
     if input_audio.shape[0] != 1 or target_audio.shape[0] != 1:
-        raise ValueError("Issue-15 preparation requires mono input and target audio")
+        raise ValueError("Audio preparation requires mono input and target audio")
     if input_rate != target_rate:
         raise ValueError(
             f"Source sample rates differ: input={input_rate}, target={target_rate}"
@@ -383,7 +357,7 @@ def prepare_aligned_audio(
         last_end = max(split.end_sample for split in splits)
         manifest = {
             "schema_version": MANIFEST_SCHEMA_VERSION,
-            "experiment": "github-issue-15-final",
+            "experiment": experiment_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "preparation_spec": desired_spec,
             "sources": {
