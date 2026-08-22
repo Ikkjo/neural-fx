@@ -82,6 +82,21 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
     )
     write_evaluation_result(result, tmp_path / "result" / "evaluation.json")
 
+    assert set(result) == {
+        "schema_version",
+        "created_at",
+        "experiment_id",
+        "run_kind",
+        "sources",
+        "model",
+        "training",
+        "inference",
+        "dataset",
+        "metrics",
+        "performance",
+        "artifacts",
+        "notes",
+    }
     assert result["run_kind"] == "smoke"
     assert set(result["metrics"]) == {
         "esr",
@@ -100,6 +115,13 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
         "state_reset_count": 1,
     }
     assert all(Path(path).exists() for path in result["artifacts"].values())
+    assert {
+        key: Path(path).name for key, path in result["artifacts"].items()
+    } == {
+        "input_audio": "input.wav",
+        "target_audio": "target.wav",
+        "prediction_audio": "prediction.wav",
+    }
     assert (
         json.loads((tmp_path / "result" / "evaluation.json").read_text())[
             "experiment_id"

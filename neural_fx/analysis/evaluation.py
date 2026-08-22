@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import statistics
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ import torch
 import torchaudio
 import yaml
 
+from ..config import NeuralFXConfig
 from ..data.audio import load_audio_pair
 from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
 from ..preprocessing.latency import LatencyCalibration
@@ -142,112 +144,176 @@ def _stft_window_starts(
     return [int(start) for start in starts], window_samples
 
 
-def evaluate_experiment(
-    manifest: dict[str, Any],
-    output_dir: str | Path,
-    device: str | torch.device = "cpu",
-    inference_chunk_size: int | None = None,
-) -> dict[str, Any]:
-    """Evaluate one checkpoint and write aligned listening samples."""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    model_spec = manifest["model"]
-    model, config = load_model_for_evaluation(
-        model_spec.get("config"), model_spec["checkpoint"], device=device
-    )
-    input_audio, target_audio = _prepare_evaluation_audio(manifest, config.sample_rate)
+@dataclass(frozen=True)
+class _EvaluationSignals:
+    input_audio: torch.Tensor
+    target_audio: torch.Tensor
+    prediction: torch.Tensor
+    chunk_size: int
 
+    @property
+    def num_samples(self) -> int:
+        return self.prediction.shape[-1]
+
+
+def _execute_evaluation(
+    model: torch.nn.Module,
+    input_audio: torch.Tensor,
+    target_audio: torch.Tensor,
+    *,
+    device: str | torch.device,
+    chunk_size: int,
+) -> _EvaluationSignals:
     input_batch = input_audio.unsqueeze(0).to(device)
-    chunk_size = int(
-        inference_chunk_size
-        if inference_chunk_size is not None
-        else manifest.get("inference_chunk_size", DEFAULT_INFERENCE_CHUNK_SIZE)
-    )
     prediction = run_chunked_inference(model, input_batch, chunk_size).detach().cpu()
     target_batch = target_audio.unsqueeze(0)
     input_batch = input_batch.cpu()
     common_length = min(
-        input_batch.shape[-1], target_batch.shape[-1], prediction.shape[-1]
+        input_batch.shape[-1],
+        target_batch.shape[-1],
+        prediction.shape[-1],
     )
-    input_batch = input_batch[..., :common_length]
-    target_batch = target_batch[..., :common_length]
-    prediction = prediction[..., :common_length]
     if common_length < 2048:
         raise ValueError("Evaluation segment must contain at least 2048 samples")
+    return _EvaluationSignals(
+        input_audio=input_batch[..., :common_length],
+        target_audio=target_batch[..., :common_length],
+        prediction=prediction[..., :common_length],
+        chunk_size=chunk_size,
+    )
 
+
+def _calculate_evaluation_metrics(
+    signals: _EvaluationSignals,
+    manifest: dict[str, Any],
+    config: NeuralFXConfig,
+) -> tuple[dict[str, float], dict[str, Any]]:
     mask_first = int(
         manifest.get(
             "burn_in_samples",
             manifest["dataset"].get("metric_mask_first", config.loss.mask_first),
         )
     )
-    if mask_first < 0 or mask_first >= common_length:
+    if mask_first < 0 or mask_first >= signals.num_samples:
         raise ValueError(
-            f"loss.mask_first ({mask_first}) must be smaller than the evaluation segment ({common_length})"
+            f"loss.mask_first ({mask_first}) must be smaller than the evaluation "
+            f"segment ({signals.num_samples})"
         )
-    metric_prediction = prediction[..., mask_first:]
-    metric_target = target_batch[..., mask_first:]
-    if metric_prediction.shape[-1] < 2048:
+
+    prediction = signals.prediction[..., mask_first:]
+    target = signals.target_audio[..., mask_first:]
+    if prediction.shape[-1] < 2048:
         raise ValueError(
             "Evaluation segment after loss masking must contain 2048 samples"
         )
+
     pre_emphasis = config.loss.pre_emphasis
     pre_emphasis_coeff = (
         pre_emphasis.coef if pre_emphasis is not None and pre_emphasis.enabled else None
     )
     stft_starts, stft_window_samples = _stft_window_starts(
-        metric_prediction.shape[-1], config.sample_rate
+        prediction.shape[-1],
+        config.sample_rate,
     )
     stft_loss = MultiResolutionSTFTLoss()
     stft_values = [
         stft_loss(
-            metric_prediction[..., start : start + stft_window_samples],
-            metric_target[..., start : start + stft_window_samples],
+            prediction[..., start : start + stft_window_samples],
+            target[..., start : start + stft_window_samples],
         ).item()
         for start in stft_starts
     ]
-    stft_distance = statistics.fmean(stft_values)
     metrics = {
         "esr": ESR(
-            metric_prediction,
-            metric_target,
+            prediction,
+            target,
             pre_emphasis_coeff=pre_emphasis_coeff,
         ).item(),
-        "mse": torch.mean((metric_prediction - metric_target) ** 2).item(),
-        "correlation": _safe_correlation(metric_prediction, metric_target),
-        "multi_resolution_stft_distance": stft_distance,
+        "mse": torch.mean((prediction - target) ** 2).item(),
+        "correlation": _safe_correlation(prediction, target),
+        "multi_resolution_stft_distance": statistics.fmean(stft_values),
     }
+    recipe = {
+        "mask_first": mask_first,
+        "configured_loss_mask_first": config.loss.mask_first,
+        "metric_samples": prediction.shape[-1],
+        "stft_window_starts": stft_starts,
+        "stft_window_samples": stft_window_samples,
+        "stft_window_values": stft_values,
+    }
+    return metrics, recipe
 
+
+def _write_listening_samples(
+    signals: _EvaluationSignals,
+    output_dir: Path,
+    sample_rate: int,
+) -> dict[str, str]:
     artifacts = {}
     for name, audio in (
-        ("input", input_batch),
-        ("target", target_batch),
-        ("prediction", prediction),
+        ("input", signals.input_audio),
+        ("target", signals.target_audio),
+        ("prediction", signals.prediction),
     ):
         path = output_dir / f"{name}.wav"
-        torchaudio.save(
-            str(path), audio.squeeze(0).clamp(-1.0, 1.0), config.sample_rate
-        )
+        torchaudio.save(str(path), audio.squeeze(0).clamp(-1.0, 1.0), sample_rate)
         artifacts[f"{name}_audio"] = str(path.resolve())
+    return artifacts
 
+
+def _load_evaluation_performance(
+    model_spec: dict[str, Any],
+    trainable_parameters: int,
+) -> dict[str, Any] | None:
+    benchmark_path = model_spec.get("benchmark_result")
+    if benchmark_path is None:
+        return None
+
+    benchmark = load_benchmark_result(benchmark_path)
+    if benchmark["model"]["trainable_parameters"] != trainable_parameters:
+        raise ValueError("Benchmark parameter count does not match the evaluated model")
+    return {
+        "result_path": str(Path(benchmark_path).resolve()),
+        "runtime": benchmark["runtime"],
+        "offline": benchmark["offline"],
+        "blocks": benchmark["blocks"],
+        "memory": benchmark["memory"],
+    }
+
+
+def evaluate_experiment(
+    manifest: dict[str, Any],
+    output_dir: str | Path,
+    device: str | torch.device = "cpu",
+    inference_chunk_size: int | None = None,
+) -> dict[str, Any]:
+    """Evaluate one checkpoint and write the complete schema-1.0 artifact set."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_spec = manifest["model"]
+    model, config = load_model_for_evaluation(
+        model_spec.get("config"),
+        model_spec["checkpoint"],
+        device=device,
+    )
+    input_audio, target_audio = _prepare_evaluation_audio(manifest, config.sample_rate)
+    chunk_size = int(
+        inference_chunk_size
+        if inference_chunk_size is not None
+        else manifest.get("inference_chunk_size", DEFAULT_INFERENCE_CHUNK_SIZE)
+    )
+    signals = _execute_evaluation(
+        model,
+        input_audio,
+        target_audio,
+        device=device,
+        chunk_size=chunk_size,
+    )
+    metrics, metric_recipe = _calculate_evaluation_metrics(signals, manifest, config)
+    artifacts = _write_listening_samples(signals, output_dir, config.sample_rate)
     trainable_parameters = sum(
         parameter.numel() for parameter in model.parameters() if parameter.requires_grad
     )
-    performance = None
-    benchmark_path = model_spec.get("benchmark_result")
-    if benchmark_path is not None:
-        benchmark = load_benchmark_result(benchmark_path)
-        if benchmark["model"]["trainable_parameters"] != trainable_parameters:
-            raise ValueError(
-                "Benchmark parameter count does not match the evaluated model"
-            )
-        performance = {
-            "result_path": str(Path(benchmark_path).resolve()),
-            "runtime": benchmark["runtime"],
-            "offline": benchmark["offline"],
-            "blocks": benchmark["blocks"],
-            "memory": benchmark["memory"],
-        }
 
     return {
         "schema_version": EVALUATION_SCHEMA_VERSION,
@@ -275,23 +341,21 @@ def evaluate_experiment(
         },
         "training": manifest["training"],
         "inference": {
-            "chunk_size": chunk_size,
-            "chunks": math.ceil(common_length / chunk_size),
+            "chunk_size": signals.chunk_size,
+            "chunks": math.ceil(signals.num_samples / signals.chunk_size),
             "state_reset_count": 1,
         },
         "dataset": {
             **manifest["dataset"],
-            "evaluated_samples": common_length,
-            "mask_first": mask_first,
-            "configured_loss_mask_first": config.loss.mask_first,
-            "metric_samples": metric_prediction.shape[-1],
-            "stft_window_starts": stft_starts,
-            "stft_window_samples": stft_window_samples,
-            "stft_window_values": stft_values,
+            "evaluated_samples": signals.num_samples,
+            **metric_recipe,
             "sample_rate": config.sample_rate,
         },
         "metrics": metrics,
-        "performance": performance,
+        "performance": _load_evaluation_performance(
+            model_spec,
+            trainable_parameters,
+        ),
         "artifacts": artifacts,
         "notes": manifest.get("notes"),
     }
