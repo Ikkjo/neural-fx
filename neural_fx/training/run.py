@@ -251,7 +251,7 @@ def _generate_plots(
 ) -> None:
     print("Generating analysis plots...")
     try:
-        from ..analysis.plotting import TrainingAnalyzer
+        from ..analysis.plotting import generate_analysis_report
 
         if best_model_path:
             model = load_model(checkpoint_path=best_model_path).model
@@ -267,7 +267,7 @@ def _generate_plots(
         )
         plot_dir = run.checkpoint_dir / config.name / "plots"
         plot_dir.mkdir(parents=True, exist_ok=True)
-        report = TrainingAnalyzer(model, config).generate_report(dataset, plot_dir)
+        report = generate_analysis_report(model, dataset, plot_dir, config=config)
         print("\nAnalysis Results:")
         print(f"  ESR: {report['esr']:.6f} - {report['esr_comment']}")
         print(f"  Plots saved to: {plot_dir}")

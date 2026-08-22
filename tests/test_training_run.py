@@ -59,9 +59,9 @@ def test_post_training_report_uses_resolved_normalization(tmp_path: Path) -> Non
 
     with (
         patch("neural_fx.training.run.AudioDataset") as dataset,
-        patch("neural_fx.analysis.plotting.TrainingAnalyzer") as analyzer,
+        patch("neural_fx.analysis.plotting.generate_analysis_report") as report,
     ):
-        analyzer.return_value.generate_report.return_value = {
+        report.return_value = {
             "esr": 0.1,
             "esr_comment": "test",
         }

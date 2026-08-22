@@ -1,5 +1,5 @@
 """Analysis module for neural audio effects."""
 
-from .plotting import TrainingAnalyzer, create_analyzer
+from .plotting import TrainingAnalyzer, generate_analysis_report, write_html_report
 
-__all__ = ["TrainingAnalyzer", "create_analyzer"]
+__all__ = ["TrainingAnalyzer", "generate_analysis_report", "write_html_report"]
