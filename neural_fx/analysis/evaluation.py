@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import statistics
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,33 @@ EVALUATION_SCHEMA_VERSION = "1.0"
 COMPARISON_SCHEMA_VERSION = "1.0"
 ARCHITECTURE_REPORT_SCHEMA_VERSION = "1.0"
 DEFAULT_INFERENCE_CHUNK_SIZE = 65_536
-REQUIRED_FINAL_SEEDS = (17, 42, 137)
-REQUIRED_ARCHITECTURES = ("lstm", "gru", "wavenet", "s4")
 QUALITY_METRICS = (
     "esr",
     "mse",
     "correlation",
     "multi_resolution_stft_distance",
 )
+
+
+@dataclass(frozen=True)
+class ArchitectureComparisonPolicy:
+    """Rules for one controlled, repeated architecture comparison."""
+
+    decision_rule_id: str
+    required_seeds: tuple[int, ...]
+    required_architectures: tuple[str, ...]
+    size_tolerance_ratio: float
+    median_esr_relative_improvement: float
+    require_lower_esr_for_all_matched_seeds: bool
+    require_esr_standard_deviation_below_median_gap: bool
+    maximum_median_mse_regression: float
+    maximum_median_mr_stft_regression: float
+    maximum_median_correlation_regression: float
+    minimum_performance_relative_improvement: float
+    require_non_overlapping_performance_ranges: bool
+    real_time_block_size: int
+    real_time_p95_deadline_fraction: float
+    benchmark_runs_per_device: int
 
 
 def _resolve_path(value: str, manifest_path: Path) -> Path:
@@ -53,13 +73,9 @@ def load_experiment_manifest(path: str | Path) -> dict[str, Any]:
         raise ValueError("run_kind must be 'smoke' or 'final'")
     if "checkpoint" not in data["model"]:
         raise ValueError("Experiment model is missing 'checkpoint'")
-    data["model"]["checkpoint"] = str(
-        _resolve_path(data["model"]["checkpoint"], path)
-    )
+    data["model"]["checkpoint"] = str(_resolve_path(data["model"]["checkpoint"], path))
     if "config" in data["model"]:
-        data["model"]["config"] = str(
-            _resolve_path(data["model"]["config"], path)
-        )
+        data["model"]["config"] = str(_resolve_path(data["model"]["config"], path))
     for key in ("input_audio", "target_audio", "split"):
         if key not in data["dataset"]:
             raise ValueError(f"Experiment dataset is missing '{key}'")
@@ -69,9 +85,7 @@ def load_experiment_manifest(path: str | Path) -> dict[str, Any]:
         raise ValueError("Experiment training section is missing 'seed'")
     benchmark_path = data["model"].get("benchmark_result")
     if benchmark_path is not None:
-        data["model"]["benchmark_result"] = str(
-            _resolve_path(benchmark_path, path)
-        )
+        data["model"]["benchmark_result"] = str(_resolve_path(benchmark_path, path))
     data["manifest_path"] = str(path)
     return data
 
@@ -172,9 +186,7 @@ def evaluate_experiment(
     model, config = load_model_for_evaluation(
         model_spec.get("config"), model_spec["checkpoint"], device=device
     )
-    input_audio, target_audio = _prepare_evaluation_audio(
-        manifest, config.sample_rate
-    )
+    input_audio, target_audio = _prepare_evaluation_audio(manifest, config.sample_rate)
 
     input_batch = input_audio.unsqueeze(0).to(device)
     chunk_size = int(
@@ -207,12 +219,12 @@ def evaluate_experiment(
     metric_prediction = prediction[..., mask_first:]
     metric_target = target_batch[..., mask_first:]
     if metric_prediction.shape[-1] < 2048:
-        raise ValueError("Evaluation segment after loss masking must contain 2048 samples")
+        raise ValueError(
+            "Evaluation segment after loss masking must contain 2048 samples"
+        )
     pre_emphasis = config.loss.pre_emphasis
     pre_emphasis_coeff = (
-        pre_emphasis.coef
-        if pre_emphasis is not None and pre_emphasis.enabled
-        else None
+        pre_emphasis.coef if pre_emphasis is not None and pre_emphasis.enabled else None
     )
     stft_starts, stft_window_samples = _stft_window_starts(
         metric_prediction.shape[-1], config.sample_rate
@@ -244,7 +256,9 @@ def evaluate_experiment(
         ("prediction", prediction),
     ):
         path = output_dir / f"{name}.wav"
-        torchaudio.save(str(path), audio.squeeze(0).clamp(-1.0, 1.0), config.sample_rate)
+        torchaudio.save(
+            str(path), audio.squeeze(0).clamp(-1.0, 1.0), config.sample_rate
+        )
         artifacts[f"{name}_audio"] = str(path.resolve())
 
     trainable_parameters = sum(
@@ -279,7 +293,9 @@ def evaluate_experiment(
                 else None
             ),
             "config_source": (
-                "explicit_file" if model_spec.get("config") is not None else "checkpoint"
+                "explicit_file"
+                if model_spec.get("config") is not None
+                else "checkpoint"
             ),
             "checkpoint": str(Path(model_spec["checkpoint"]).resolve()),
         },
@@ -337,7 +353,9 @@ def _size_matched_groups(
 ) -> list[dict[str, Any]]:
     if tolerance < 1.0:
         raise ValueError("Size tolerance must be at least 1.0")
-    ordered = sorted(results, key=lambda result: result["model"]["trainable_parameters"])
+    ordered = sorted(
+        results, key=lambda result: result["model"]["trainable_parameters"]
+    )
     groups: list[list[dict[str, Any]]] = []
     for result in ordered:
         parameters = result["model"]["trainable_parameters"]
@@ -376,6 +394,7 @@ def _numeric_summary(values_by_key: dict[str, float]) -> dict[str, Any]:
 def _aggregate_benchmarks(
     benchmark_results: list[dict[str, Any]],
     representative_checkpoint: str | None,
+    policy: ArchitectureComparisonPolicy,
 ) -> dict[str, Any]:
     """Aggregate fresh benchmark processes by device."""
     by_device: dict[str, list[dict[str, Any]]] = {}
@@ -396,7 +415,9 @@ def _aggregate_benchmarks(
             sizes == block_size_sets[0] for sizes in block_size_sets
         )
         blocks = {}
-        block_sizes = sorted(set.intersection(*block_size_sets)) if block_size_sets else []
+        block_sizes = (
+            sorted(set.intersection(*block_size_sets)) if block_size_sets else []
+        )
         for block_size in block_sizes:
             matching = [
                 next(
@@ -435,7 +456,8 @@ def _aggregate_benchmarks(
                 "deadline_headroom_ms": _numeric_summary(deadline_headroom),
                 "real_time_capable": all(
                     block["deadline_misses"] == 0
-                    and block["p95_ms"] <= 0.8 * block["deadline_ms"]
+                    and block["p95_ms"]
+                    <= policy.real_time_p95_deadline_fraction * block["deadline_ms"]
                     for block in matching
                 ),
             }
@@ -482,7 +504,9 @@ def _aggregate_benchmarks(
         devices[device] = {
             "status": (
                 "complete"
-                if len(runs) == 3 and checkpoints_match and block_recipe_matches
+                if len(runs) == policy.benchmark_runs_per_device
+                and checkpoints_match
+                and block_recipe_matches
                 else "incomplete"
             ),
             "run_count": len(runs),
@@ -499,14 +523,13 @@ def _aggregate_benchmarks(
 
 
 def _quality_conclusion(
-    architectures: list[dict[str, Any]], *, size_matched: bool
+    architectures: list[dict[str, Any]],
+    policy: ArchitectureComparisonPolicy,
+    *,
+    size_matched: bool,
 ) -> dict[str, Any]:
     complete = [item for item in architectures if item["status"] == "complete"]
-    if (
-        len(complete) != len(architectures)
-        or len(complete) < 2
-        or not size_matched
-    ):
+    if len(complete) != len(architectures) or len(complete) < 2 or not size_matched:
         return {
             "status": "incomplete",
             "winner": None,
@@ -526,25 +549,30 @@ def _quality_conclusion(
         for seed in candidate_esr["raw"]
     )
     conditions = {
-        "median_esr_at_least_5_percent_lower": (
-            median_gap / next_esr["median"] >= 0.05
+        "median_esr_relative_improvement_met": (
+            median_gap / next_esr["median"] >= policy.median_esr_relative_improvement
         ),
-        "esr_lower_for_all_matched_seeds": matched_seed_lower,
+        "esr_lower_for_all_matched_seeds": (
+            matched_seed_lower or not policy.require_lower_esr_for_all_matched_seeds
+        ),
         "esr_standard_deviation_smaller_than_median_gap": (
             candidate_esr["standard_deviation"] < median_gap
+            or not policy.require_esr_standard_deviation_below_median_gap
         ),
-        "median_mse_regression_at_most_5_percent": (
+        "median_mse_regression_within_limit": (
             candidate["metrics"]["mse"]["median"]
-            <= next_best["metrics"]["mse"]["median"] * 1.05
+            <= next_best["metrics"]["mse"]["median"]
+            * (1.0 + policy.maximum_median_mse_regression)
         ),
-        "median_mr_stft_regression_at_most_5_percent": (
+        "median_mr_stft_regression_within_limit": (
             candidate["metrics"]["multi_resolution_stft_distance"]["median"]
             <= next_best["metrics"]["multi_resolution_stft_distance"]["median"]
-            * 1.05
+            * (1.0 + policy.maximum_median_mr_stft_regression)
         ),
-        "median_correlation_not_lower_by_more_than_0_01": (
+        "median_correlation_regression_within_limit": (
             candidate["metrics"]["correlation"]["median"]
-            >= next_best["metrics"]["correlation"]["median"] - 0.01
+            >= next_best["metrics"]["correlation"]["median"]
+            - policy.maximum_median_correlation_regression
         ),
     }
     winner = candidate["architecture"] if all(conditions.values()) else None
@@ -564,13 +592,16 @@ def _quality_conclusion(
 
 
 def _performance_conclusion(
-    architectures: list[dict[str, Any]], quality_winner: str | None
+    architectures: list[dict[str, Any]],
+    quality_winner: str | None,
+    policy: ArchitectureComparisonPolicy,
 ) -> dict[str, Any]:
+    block_size = str(policy.real_time_block_size)
     cpu_ready = [
         item
         for item in architectures
         if item.get("benchmarks", {}).get("cpu", {}).get("status") == "complete"
-        and "128" in item["benchmarks"]["cpu"]["blocks"]
+        and block_size in item["benchmarks"]["cpu"]["blocks"]
     ]
     if len(cpu_ready) != len(architectures) or len(cpu_ready) < 2:
         return {
@@ -585,12 +616,15 @@ def _performance_conclusion(
         fastest, next_fastest = ordered[:2]
         fastest_values = metric_getter(fastest)
         next_values = metric_getter(next_fastest)
-        improvement = (
-            next_values["median"] - fastest_values["median"]
-        ) / next_values["median"]
+        improvement = (next_values["median"] - fastest_values["median"]) / next_values[
+            "median"
+        ]
         is_material = (
-            improvement >= 0.10
-            and fastest_values["maximum"] < next_values["minimum"]
+            improvement >= policy.minimum_performance_relative_improvement
+            and (
+                fastest_values["maximum"] < next_values["minimum"]
+                or not policy.require_non_overlapping_performance_ranges
+            )
         )
         return {
             "winner": fastest["architecture"] if is_material else None,
@@ -604,8 +638,8 @@ def _performance_conclusion(
         }
 
     material_differences = {
-        "cpu_128_sample_p95": material(
-            lambda item: item["benchmarks"]["cpu"]["blocks"]["128"]["p95_ms"]
+        f"cpu_{block_size}_sample_p95": material(
+            lambda item: item["benchmarks"]["cpu"]["blocks"][block_size]["p95_ms"]
         ),
         "cpu_offline_real_time_factor": material(
             lambda item: item["benchmarks"]["cpu"]["offline_real_time_factor"]
@@ -620,7 +654,7 @@ def _performance_conclusion(
         candidate_cpu = candidate["benchmarks"]["cpu"]
         candidate_values = (
             candidate["parameters"],
-            candidate_cpu["blocks"]["128"]["p95_ms"]["median"],
+            candidate_cpu["blocks"][block_size]["p95_ms"]["median"],
             candidate_cpu["offline_real_time_factor"]["median"],
             candidate_cpu["memory"]["process_peak_rss_bytes"]["median"],
         )
@@ -631,15 +665,13 @@ def _performance_conclusion(
             for other_values in [
                 (
                     other["parameters"],
-                    other["benchmarks"]["cpu"]["blocks"]["128"]["p95_ms"][
+                    other["benchmarks"]["cpu"]["blocks"][block_size]["p95_ms"][
                         "median"
                     ],
-                    other["benchmarks"]["cpu"]["offline_real_time_factor"][
+                    other["benchmarks"]["cpu"]["offline_real_time_factor"]["median"],
+                    other["benchmarks"]["cpu"]["memory"]["process_peak_rss_bytes"][
                         "median"
                     ],
-                    other["benchmarks"]["cpu"]["memory"][
-                        "process_peak_rss_bytes"
-                    ]["median"],
                 )
             ]
         ):
@@ -649,9 +681,9 @@ def _performance_conclusion(
         "material_differences": material_differences,
         "pareto_winner": pareto_winner,
         "statement": (
-            f"{pareto_winner} is Pareto-dominant under the preregistered rule"
+            f"{pareto_winner} is Pareto-dominant under the configured rule"
             if pareto_winner is not None
-            else "no Pareto-dominant model under the preregistered rule"
+            else "no Pareto-dominant model under the configured rule"
         ),
     }
 
@@ -660,11 +692,9 @@ def build_architecture_report(
     results: list[dict[str, Any]],
     benchmark_results: list[dict[str, Any]] | None = None,
     *,
-    size_tolerance: float = 1.01,
-    required_seeds: tuple[int, ...] = REQUIRED_FINAL_SEEDS,
-    required_architectures: tuple[str, ...] = REQUIRED_ARCHITECTURES,
+    policy: ArchitectureComparisonPolicy,
 ) -> tuple[dict[str, Any], str]:
-    """Aggregate final seeds and apply the preregistered conclusion rules."""
+    """Aggregate final seeds and apply an explicit comparison policy."""
     benchmark_results = benchmark_results or []
     by_architecture: dict[str, list[dict[str, Any]]] = {}
     for result in results:
@@ -676,8 +706,8 @@ def build_architecture_report(
         )
 
     architectures = []
-    required_seed_set = set(required_seeds)
-    for architecture in required_architectures:
+    required_seed_set = set(policy.required_seeds)
+    for architecture in policy.required_architectures:
         runs = by_architecture.get(architecture, [])
         seed_runs = {int(run["training"]["seed"]): run for run in runs}
         seeds = set(seed_runs)
@@ -689,13 +719,13 @@ def build_architecture_report(
         parameter_counts = {run["model"]["trainable_parameters"] for run in runs}
         complete = (
             seeds == required_seed_set
-            and len(runs) == len(required_seeds)
+            and len(runs) == len(policy.required_seeds)
             and len(parameter_counts) == 1
             and finite
             and all(run["run_kind"] == "final" for run in runs)
         )
         incomplete_reasons = []
-        if seeds != required_seed_set or len(runs) != len(required_seeds):
+        if seeds != required_seed_set or len(runs) != len(policy.required_seeds):
             incomplete_reasons.append("required_seed_set_not_complete")
         if len(parameter_counts) != 1:
             incomplete_reasons.append("parameter_count_not_consistent")
@@ -703,21 +733,25 @@ def build_architecture_report(
             incomplete_reasons.append("quality_metric_not_finite")
         if any(run["run_kind"] != "final" for run in runs):
             incomplete_reasons.append("non_final_run_present")
-        metrics = {
-            metric: _numeric_summary(
-                {
-                    str(seed): float(seed_runs[seed]["metrics"][metric])
-                    for seed in sorted(seed_runs)
-                }
-            )
-            for metric in QUALITY_METRICS
-        } if runs else {}
+        metrics = (
+            {
+                metric: _numeric_summary(
+                    {
+                        str(seed): float(seed_runs[seed]["metrics"][metric])
+                        for seed in sorted(seed_runs)
+                    }
+                )
+                for metric in QUALITY_METRICS
+            }
+            if runs
+            else {}
+        )
         representative = None
         representative_checkpoint = None
         if complete:
-            representative_run = sorted(
-                runs, key=lambda run: run["metrics"]["esr"]
-            )[len(runs) // 2]
+            representative_run = sorted(runs, key=lambda run: run["metrics"]["esr"])[
+                len(runs) // 2
+            ]
             representative_checkpoint = representative_run["sources"]["checkpoint"]
             representative = {
                 "seed": int(representative_run["training"]["seed"]),
@@ -754,6 +788,7 @@ def build_architecture_report(
                 "benchmarks": _aggregate_benchmarks(
                     benchmarks_by_architecture.get(architecture, []),
                     representative_checkpoint,
+                    policy,
                 ),
             }
         )
@@ -766,44 +801,54 @@ def build_architecture_report(
         for item in architectures
         if item["parameters"] is not None
     ]
-    size_groups = _size_matched_groups(size_inputs, size_tolerance) if size_inputs else []
-    all_architectures_size_matched = (
-        len(size_groups) == 1
-        and len(size_groups[0]["experiments"]) == len(required_architectures)
+    size_groups = (
+        _size_matched_groups(size_inputs, policy.size_tolerance_ratio)
+        if size_inputs
+        else []
     )
+    all_architectures_size_matched = len(size_groups) == 1 and len(
+        size_groups[0]["experiments"]
+    ) == len(policy.required_architectures)
     quality = _quality_conclusion(
         architectures,
+        policy,
         size_matched=all_architectures_size_matched,
     )
-    performance = _performance_conclusion(architectures, quality.get("winner"))
+    performance = _performance_conclusion(
+        architectures,
+        quality.get("winner"),
+        policy,
+    )
     report = {
         "schema_version": ARCHITECTURE_REPORT_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "decision_rule": "issue-15-v1-preregistered",
-        "required_seeds": list(required_seeds),
-        "required_architectures": list(required_architectures),
-        "size_tolerance_ratio": size_tolerance,
+        "decision_rule": policy.decision_rule_id,
+        "required_seeds": list(policy.required_seeds),
+        "required_architectures": list(policy.required_architectures),
+        "size_tolerance_ratio": policy.size_tolerance_ratio,
         "size_groups": size_groups,
         "all_architectures_size_matched": all_architectures_size_matched,
         "rules": {
             "quality": {
-                "median_esr_relative_improvement": 0.05,
-                "requires_lower_esr_for_all_matched_seeds": True,
-                "requires_esr_standard_deviation_below_median_gap": True,
-                "maximum_median_mse_regression": 0.05,
-                "maximum_median_mr_stft_regression": 0.05,
-                "maximum_median_correlation_regression": 0.01,
+                "median_esr_relative_improvement": policy.median_esr_relative_improvement,
+                "requires_lower_esr_for_all_matched_seeds": policy.require_lower_esr_for_all_matched_seeds,
+                "requires_esr_standard_deviation_below_median_gap": policy.require_esr_standard_deviation_below_median_gap,
+                "maximum_median_mse_regression": policy.maximum_median_mse_regression,
+                "maximum_median_mr_stft_regression": policy.maximum_median_mr_stft_regression,
+                "maximum_median_correlation_regression": policy.maximum_median_correlation_regression,
             },
             "performance": {
-                "minimum_median_relative_improvement": 0.10,
-                "requires_non_overlapping_ranges": True,
-                "real_time_p95_deadline_fraction": 0.80,
+                "minimum_median_relative_improvement": policy.minimum_performance_relative_improvement,
+                "requires_non_overlapping_ranges": policy.require_non_overlapping_performance_ranges,
+                "real_time_block_size": policy.real_time_block_size,
+                "real_time_p95_deadline_fraction": policy.real_time_p95_deadline_fraction,
+                "benchmark_runs_per_device": policy.benchmark_runs_per_device,
             },
             "pareto": {
                 "requires_quality_winner": True,
                 "dimensions": [
                     "parameters",
-                    "cpu_128_sample_p95",
+                    f"cpu_{policy.real_time_block_size}_sample_p95",
                     "cpu_offline_real_time_factor",
                     "cpu_peak_rss",
                 ],
@@ -851,7 +896,7 @@ def build_architecture_report(
     lines.extend(
         [
             "",
-            "## Preregistered conclusions",
+            "## Policy conclusions",
             "",
             f"- Quality: {quality['statement']}.",
             f"- Performance: {performance['statement']}.",
@@ -883,9 +928,7 @@ def build_comparison_report(
         key: results[0].get("dataset", {}).get(key) for key in dataset_keys
     }
     for result in results[1:]:
-        candidate = {
-            key: result.get("dataset", {}).get(key) for key in dataset_keys
-        }
+        candidate = {key: result.get("dataset", {}).get(key) for key in dataset_keys}
         if candidate != expected_dataset:
             raise ValueError(
                 "Evaluation results must use the same aligned dataset segment"
@@ -982,12 +1025,9 @@ def build_comparison_report(
                 samples=sample_links,
             )
         )
-    prefix = (
-        "# Model comparison\n\n"
-        + (
-            "> These results include smoke runs. They validate the workflow and must not be used as a final quality ranking.\n\n"
-            if report["interpretation"] == "workflow_validation_only"
-            else "> Final experiment results. Interpret them with the recorded dataset, seeds, and hardware.\n\n"
-        )
+    prefix = "# Model comparison\n\n" + (
+        "> These results include smoke runs. They validate the workflow and must not be used as a final quality ranking.\n\n"
+        if report["interpretation"] == "workflow_validation_only"
+        else "> Final experiment results. Interpret them with the recorded dataset, seeds, and hardware.\n\n"
     )
     return report, prefix + "\n".join(lines) + "\n"

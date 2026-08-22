@@ -9,8 +9,11 @@ AGENTS.md
 TODO.md
 .opencode
 .ipynb_checkpoints
+.pytest_cache/
 .ruff_cache
+.venv/
 data
+local/
 venv
 
 # Training artifacts
