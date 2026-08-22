@@ -15,7 +15,7 @@ import torch
 import torchaudio
 import yaml
 
-from ..data.dataset import AudioDataset
+from ..data.audio import load_audio_pair
 from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
 from ..preprocessing.latency import LatencyCalibration
 from .benchmarking import load_benchmark_result, load_model_for_evaluation
@@ -98,21 +98,19 @@ def _prepare_evaluation_audio(
     normalization = dataset.get("normalization", "paired_peak")
     if normalization not in {"paired_peak", "none"}:
         raise ValueError("normalization must be 'paired_peak' or 'none'")
-    audio_dataset = AudioDataset(
+    audio_pair = load_audio_pair(
         input_path=dataset["input_audio"],
         target_path=dataset["target_audio"],
-        segment_length=1,
         sample_rate=sample_rate,
         normalize=normalization == "paired_peak",
-        random_segments=False,
         latency_calibration=LatencyCalibration(
             delay_samples=delay_samples,
             method="manual",
             correlation_score=1.0,
         ),
     )
-    input_audio = audio_dataset.input_audio
-    target_audio = audio_dataset.target_audio
+    input_audio = audio_pair.input_audio
+    target_audio = audio_pair.target_audio
 
     start = int(dataset.get("start_sample", 0))
     available = min(input_audio.shape[-1], target_audio.shape[-1])
