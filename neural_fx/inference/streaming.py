@@ -1,4 +1,5 @@
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -60,6 +61,92 @@ def save_audio(audio: Tensor, path: str | Path, sample_rate: int = 48000) -> Non
     torchaudio.save(str(path), audio, sample_rate)
 
 
+@dataclass(frozen=True)
+class InferenceResult:
+    output: Tensor
+    chunk_size: int
+    chunks: int
+
+
+class InferenceSession:
+    """Persistent model stream whose state changes only on process or reset."""
+
+    def __init__(self, model: "BaseNeuralFXModel", sample_rate: int | None = None):
+        self.model = model
+        self.sample_rate = _resolve_model_sample_rate(model, sample_rate)
+        self.model.eval()
+        self.model.reset_state()
+
+    def process_block(
+        self,
+        block: Tensor,
+        conditioning: Tensor | None = None,
+    ) -> Tensor:
+        with torch.inference_mode():
+            if conditioning is None:
+                return self.model(block)
+            return self.model(block, conditioning=conditioning)
+
+    def process_sample(
+        self,
+        sample: float,
+        conditioning: Tensor | float | None = None,
+    ) -> float:
+        parameter = next(self.model.parameters(), None)
+        device = parameter.device if parameter is not None else torch.device("cpu")
+        x = torch.tensor([[sample]], device=device)
+        if isinstance(conditioning, float):
+            conditioning = torch.tensor([[conditioning]], device=device)
+        elif conditioning is not None:
+            conditioning = conditioning.to(device)
+            if conditioning.ndim == 1:
+                conditioning = conditioning.unsqueeze(0)
+        with torch.inference_mode():
+            if conditioning is None:
+                output = self.model.process_sample(x)
+            else:
+                output = self.model.process_sample(x, conditioning=conditioning)
+        return float(output.item())
+
+    def reset(self) -> None:
+        self.model.reset_state()
+
+
+def run_inference(
+    model: "BaseNeuralFXModel",
+    audio: Tensor,
+    *,
+    chunk_size: int = 8192,
+    conditioning: Tensor | None = None,
+) -> InferenceResult:
+    """Run one finite buffer with a single reset and state carried across chunks."""
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if audio.shape[-1] == 0:
+        raise ValueError("inference audio must contain at least one sample")
+    if audio.ndim == 2:
+        audio = audio.unsqueeze(0)
+
+    session = InferenceSession(model)
+    outputs = []
+    for start in range(0, audio.shape[-1], chunk_size):
+        end = min(start + chunk_size, audio.shape[-1])
+        chunk_conditioning = conditioning
+        if conditioning is not None and conditioning.ndim == 3:
+            chunk_conditioning = conditioning[..., start:end]
+        outputs.append(
+            session.process_block(
+                audio[..., start:end],
+                conditioning=chunk_conditioning,
+            )
+        )
+    return InferenceResult(
+        output=torch.cat(outputs, dim=-1),
+        chunk_size=chunk_size,
+        chunks=len(outputs),
+    )
+
+
 def process_audio(
     model: "BaseNeuralFXModel",
     input_path: str | Path,
@@ -70,37 +157,13 @@ def process_audio(
 ) -> Tensor:
     """Process audio file through model."""
     sample_rate = _resolve_model_sample_rate(model, sample_rate)
-    model.eval()
-    model.reset_state()
-
     audio = load_audio(input_path, sample_rate)
-
-    # Process in chunks to manage memory
-    total_length = audio.shape[-1]
-    output_chunks = []
-
-    with torch.no_grad():
-        for start in range(0, total_length, chunk_size):
-            end = min(start + chunk_size, total_length)
-            chunk = audio[..., start:end]
-
-            if chunk.shape[-1] == 0:
-                break
-
-            # Add batch dimension if needed: [C, T] -> [B, C, T]
-            if chunk.ndim == 2:
-                chunk = chunk.unsqueeze(0)
-
-            chunk_conditioning = conditioning
-            if conditioning is not None and conditioning.ndim == 3:
-                chunk_conditioning = conditioning[..., start:end]
-            if chunk_conditioning is None:
-                out_chunk = model(chunk)
-            else:
-                out_chunk = model(chunk, conditioning=chunk_conditioning)
-            output_chunks.append(out_chunk)
-
-    output = torch.cat(output_chunks, dim=-1)
+    output = run_inference(
+        model,
+        audio,
+        chunk_size=chunk_size,
+        conditioning=conditioning,
+    ).output
     save_audio(output, output_path, sample_rate)
 
     return output
@@ -116,9 +179,6 @@ def evaluate_model(
 ) -> dict[str, float]:
     """Evaluate model against target audio."""
     sample_rate = _resolve_model_sample_rate(model, sample_rate)
-    model.eval()
-    model.reset_state()
-
     input_audio = load_audio(input_path, sample_rate)
     target_audio = load_audio(target_path, sample_rate)
 
@@ -126,17 +186,14 @@ def evaluate_model(
     input_audio = input_audio[..., :min_length]
     target_audio = target_audio[..., :min_length]
 
-    # Add batch dimension: [C, T] -> [B, C, T]
-    if input_audio.ndim == 2:
-        input_audio = input_audio.unsqueeze(0)
     if target_audio.ndim == 2:
         target_audio = target_audio.unsqueeze(0)
-
-    with torch.no_grad():
-        if conditioning is None:
-            pred_audio = model(input_audio)
-        else:
-            pred_audio = model(input_audio, conditioning=conditioning)
+    pred_audio = run_inference(
+        model,
+        input_audio,
+        chunk_size=min_length,
+        conditioning=conditioning,
+    ).output
 
     if burn_in > 0:
         pred_audio = pred_audio[..., burn_in:]
@@ -151,42 +208,5 @@ def evaluate_model(
     }
 
 
-class StreamingProcessor:
-    """Real-time streaming processor for model inference."""
-
-    def __init__(self, model: "BaseNeuralFXModel", sample_rate: int | None = None):
-        self.model = model
-        self.sample_rate = _resolve_model_sample_rate(model, sample_rate)
-        self.model.eval()
-        self.model.reset_state()
-
-    def process_block(
-        self, block: Tensor, conditioning: Tensor | None = None
-    ) -> Tensor:
-        """Process a block of samples."""
-        with torch.no_grad():
-            if conditioning is None:
-                return self.model(block)
-            return self.model(block, conditioning=conditioning)
-
-    def process_sample(
-        self, sample: float, conditioning: Tensor | float | None = None
-    ) -> float:
-        """Process a single sample (for real-time use)."""
-        device = next(self.model.parameters()).device
-        x = torch.tensor([[sample]], device=device)
-        if isinstance(conditioning, float):
-            conditioning = torch.tensor([[conditioning]], device=device)
-        elif conditioning is not None:
-            conditioning = conditioning.to(device)
-            if conditioning.ndim == 1:
-                conditioning = conditioning.unsqueeze(0)
-        if conditioning is None:
-            output = self.model.process_sample(x)
-        else:
-            output = self.model.process_sample(x, conditioning=conditioning)
-        return float(output.item())
-
-    def reset(self) -> None:
-        """Reset model state."""
-        self.model.reset_state()
+class StreamingProcessor(InferenceSession):
+    """Compatibility name for the persistent inference session."""

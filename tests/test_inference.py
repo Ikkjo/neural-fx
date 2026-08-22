@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -11,10 +12,12 @@ import torchaudio
 
 from neural_fx.config import LSTMParams, ModelConfig
 from neural_fx.inference.streaming import (
+    InferenceSession,
     StreamingProcessor,
     evaluate_model,
     load_audio,
     process_audio,
+    run_inference,
     save_audio,
 )
 from neural_fx.models.recurrent import NeuralfxLSTM
@@ -92,34 +95,50 @@ class TestStreamingInference:
     def test_streaming_processor_reset(self, simple_model):
         """Test that reset clears model state."""
         processor = StreamingProcessor(simple_model, sample_rate=48000)
-
-        # Process some samples
+        block = torch.randn(1, 1, 32)
         for _ in range(10):
             processor.process_sample(0.5)
-
-        # Reset
         processor.reset()
+        actual = processor.process_block(block)
+        processor.reset()
+        expected = processor.process_block(block)
 
-        # State should be cleared
-        assert simple_model.hidden_state is None
+        torch.testing.assert_close(actual, expected)
 
     def test_streaming_processor_stateful(self, simple_model):
         """Test that processor maintains state between calls."""
         processor = StreamingProcessor(simple_model, sample_rate=48000)
 
-        # First call
-        block1 = torch.randn(1, 1, 256)
-        out1 = processor.process_block(block1)
+        block = torch.randn(1, 1, 256)
+        first = processor.process_block(block)
+        second = processor.process_block(block)
+        processor.reset()
+        fresh = processor.process_block(block)
 
-        # State should be populated
-        assert simple_model.hidden_state is not None
+        torch.testing.assert_close(first, fresh)
+        assert not torch.allclose(second, fresh)
 
-        # Second call - should use previous state
-        block2 = torch.randn(1, 1, 256)
-        out2 = processor.process_block(block2)
+    def test_finite_inference_resets_once_and_reports_chunks(self, simple_model):
+        audio = torch.randn(1, 1, 129)
+        with patch.object(
+            simple_model,
+            "reset_state",
+            wraps=simple_model.reset_state,
+        ) as reset:
+            result = run_inference(simple_model, audio, chunk_size=31)
 
-        # Outputs should be different tensors
-        assert out1 is not out2
+        assert result.output.shape == audio.shape
+        assert result.chunk_size == 31
+        assert result.chunks == 5
+        reset.assert_called_once_with()
+
+    def test_inference_session_carries_state_until_explicit_reset(self, simple_model):
+        session = InferenceSession(simple_model)
+        first = session.process_block(torch.randn(1, 1, 16))
+        second = session.process_block(torch.randn(1, 1, 16))
+
+        assert first.shape == second.shape == (1, 1, 16)
+        session.reset()
 
     def test_streaming_processor_accepts_conditioning(self):
         """Block and sample streaming expose model conditioning controls."""

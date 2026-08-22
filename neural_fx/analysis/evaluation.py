@@ -17,6 +17,7 @@ import yaml
 
 from ..config import NeuralFXConfig
 from ..data.audio import load_audio_pair
+from ..inference import run_inference
 from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
 from ..preprocessing.latency import LatencyCalibration
 from .benchmarking import load_benchmark_result, load_model_for_evaluation
@@ -112,16 +113,7 @@ def run_chunked_inference(
     chunk_size: int = DEFAULT_INFERENCE_CHUNK_SIZE,
 ) -> torch.Tensor:
     """Run stateful inference, resetting once and carrying state across chunks."""
-    if chunk_size <= 0:
-        raise ValueError("inference chunk size must be positive")
-    model.reset_state()
-    chunks = []
-    with torch.inference_mode():
-        for start in range(0, audio.shape[-1], chunk_size):
-            chunks.append(model(audio[..., start : start + chunk_size]))
-    if not chunks:
-        raise ValueError("evaluation audio must contain at least one sample")
-    return torch.cat(chunks, dim=-1)
+    return run_inference(model, audio, chunk_size=chunk_size).output
 
 
 def _stft_window_starts(
