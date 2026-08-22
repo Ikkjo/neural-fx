@@ -246,9 +246,8 @@ neural-fx/
 ├── scripts/                # Entry-point scripts
 │   ├── train.py            # Training script
 │   └── export.py           # Model export script
-├── tests/                  # Test suite
+└── tests/                  # Test suite
 │   └── test_recurrent.py   # LSTM/GRU tests
-└── notebooks/              # Jupyter notebooks (training, analysis)
 ```
 
 ## Testing
@@ -268,8 +267,6 @@ pytest tests/test_recurrent.py -v
 # Run with coverage
 pytest --cov=neural_fx
 ```
-
-See [TESTING.md](TESTING.md) for detailed testing guidelines.
 
 ## Linting
 
@@ -365,10 +362,6 @@ The first `burn_in` samples of each training segment:
 - Compatible with [RTNeural](https://github.com/jatinchowdhury18/RTNeural) C++ library
 - Lightweight format for real-time audio plugins
 - Supports LSTM, GRU, Conv1D, and Dense layers
-
-## Contributing
-
-See [AGENTS.md](AGENTS.md) for development guidelines and code style.
 
 ## License
 
