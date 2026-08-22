@@ -16,8 +16,9 @@ from typing import Any
 import torch
 from torch import Tensor
 
-from ..config import NeuralFXConfig, config_from_dict, load_config
-from ..models import BaseNeuralFXModel, create_model_from_config
+from ..artifacts import load_model
+from ..config import NeuralFXConfig
+from ..models import BaseNeuralFXModel
 
 BENCHMARK_SCHEMA_VERSION = "1.0"
 
@@ -27,49 +28,12 @@ def load_model_for_evaluation(
     checkpoint_path: str | Path | None = None,
     device: str | torch.device = "cpu",
 ) -> tuple[BaseNeuralFXModel, NeuralFXConfig]:
-    """Load a model using an explicit or checkpoint-embedded configuration."""
-    checkpoint = None
-    if checkpoint_path is not None:
-        checkpoint_path = Path(checkpoint_path)
-        checkpoint = torch.load(
-            checkpoint_path, map_location="cpu", weights_only=False
-        )
-
-    if config_path is not None:
-        config = load_config(config_path)
-    elif checkpoint is not None and "neural_fx_config" in checkpoint:
-        config = config_from_dict(checkpoint["neural_fx_config"])
-    elif checkpoint_path is not None:
-        metadata_path = checkpoint_path.with_suffix(".meta.json")
-        if metadata_path.exists():
-            metadata = json.loads(metadata_path.read_text())
-            if "config" not in metadata:
-                raise ValueError("Checkpoint metadata does not contain a config")
-            config = config_from_dict(metadata["config"])
-        else:
-            raise ValueError(
-                "Checkpoint does not contain a complete neural-fx configuration. "
-                "Pass --config for legacy checkpoints."
-            )
-    else:
-        raise ValueError("A config or checkpoint is required")
-
-    model = create_model_from_config(config.model)
-    if checkpoint is not None:
-        state_dict = checkpoint.get("state_dict", checkpoint)
-        if not isinstance(state_dict, dict):
-            raise ValueError("Checkpoint does not contain a state dictionary")
-        lightning_state = {
-            key.removeprefix("model."): value
-            for key, value in state_dict.items()
-            if key.startswith("model.")
-        }
-        model_state = lightning_state or state_dict
-        model.load_state_dict(model_state, strict=True)
-
-    model.to(device)
-    model.eval()
-    return model, config
+    loaded = load_model(
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        device=device,
+    )
+    return loaded.model, loaded.config
 
 
 def _synchronize(device: torch.device) -> None:
