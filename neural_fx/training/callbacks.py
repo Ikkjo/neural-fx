@@ -8,7 +8,7 @@ from typing import Any
 
 import lightning as L
 import torch
-from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 from ..config import NeuralFXConfig
 
@@ -220,34 +220,3 @@ class ValidationEarlyStopping(EarlyStopping):
             strict=strict,
             **kwargs,
         )
-
-
-class ESRThresholdStopping(Callback):
-    """Stop training when ESR reaches a target threshold.
-
-    This is useful for quickly stopping training when model quality is good enough.
-    """
-
-    def __init__(self, threshold: float = 0.01, monitor: str = "val_esr"):
-        """Initialize ESR threshold stopping.
-
-        Args:
-            threshold: ESR threshold to stop training at.
-            monitor: Metric to monitor (default: val_esr).
-        """
-        super().__init__()
-        self.threshold = threshold
-        self.monitor = monitor
-
-    def on_validation_epoch_end(
-        self, trainer: L.Trainer, pl_module: L.LightningModule
-    ) -> None:
-        """Check if ESR threshold is reached."""
-        if self.monitor not in trainer.callback_metrics:
-            return
-
-        current_esr = trainer.callback_metrics[self.monitor].item()
-
-        if current_esr <= self.threshold:
-            trainer.should_stop = True
-            trainer.callback_metrics["stopped_by_esr_threshold"] = torch.tensor(1.0)

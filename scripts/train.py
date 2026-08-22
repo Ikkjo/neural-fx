@@ -162,14 +162,6 @@ def main():
         help="Ignore data validation warnings",
     )
     parser.add_argument(
-        "--esr_threshold",
-        type=float,
-        default=None,
-        help="ESR threshold for early stopping (overrides config)",
-    )
-    #TODO: check if all of the arguments actually exist in the config and
-    # are properly overridden, especially the nested ones like latency.method and latency.manual_delay.
-    parser.add_argument(
         "--patience",
         type=int,
         default=None,
