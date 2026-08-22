@@ -12,7 +12,7 @@ from neural_fx.config import config_from_dict
 from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
 from neural_fx.training.callbacks import NeuralFXCheckpoint
 from neural_fx.training.lightning_module import NeuralFXModule
-from scripts.train import create_trainer, publish_best_checkpoint
+from neural_fx.training.run import create_trainer, publish_best_checkpoint
 
 
 def _write_delayed_pair(root: Path) -> tuple[Path, Path]:
@@ -124,7 +124,7 @@ def test_normalize_and_deterministic_flags_reach_runtime_construction() -> None:
     assert dataset.call_args_list[1].kwargs["normalize"] is False
 
     trainer_config = SimpleNamespace(training=SimpleNamespace(deterministic=True))
-    with patch("scripts.train.L.Trainer") as trainer:
+    with patch("neural_fx.training.run.L.Trainer") as trainer:
         create_trainer(trainer_config, {"max_epochs": 1})
     trainer.assert_called_once_with(deterministic=True, max_epochs=1)
 
