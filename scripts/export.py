@@ -4,10 +4,7 @@
 import argparse
 from pathlib import Path
 
-import torch
-
-from neural_fx.config import load_config
-from neural_fx.models import create_model_from_config
+from neural_fx.artifacts import load_model
 
 
 def main():
@@ -31,22 +28,12 @@ def main():
     )
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    model = create_model_from_config(config.model)
-
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
-    state_dict = checkpoint.get("state_dict", checkpoint)
-
-    # Remove "model." prefix if present (from Lightning checkpoint)
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("model."):
-            new_state_dict[k[6:]] = v
-        else:
-            new_state_dict[k] = v
-
-    model.load_state_dict(new_state_dict)
-    model.eval()
+    loaded = load_model(
+        checkpoint_path=args.checkpoint,
+        config_path=args.config,
+    )
+    model = loaded.model
+    config = loaded.config
 
     output_dir = Path(args.output_dir) / config.name
     output_dir.mkdir(parents=True, exist_ok=True)
