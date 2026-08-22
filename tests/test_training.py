@@ -384,6 +384,27 @@ class TestUpdatedDataset:
         assert not val_dataset.random_segments
         assert val_dataset.transform is None
 
+    def test_train_val_split_resamples_target_from_its_own_rate(self, tmp_path):
+        input_path = tmp_path / "input.wav"
+        target_path = tmp_path / "target.wav"
+        input_audio = torch.linspace(-0.5, 0.5, 16_000).unsqueeze(0)
+        target_audio = torch.linspace(-0.5, 0.5, 8_000).unsqueeze(0)
+        torchaudio.save(input_path, input_audio, 16_000)
+        torchaudio.save(target_path, target_audio, 8_000)
+
+        train_dataset, val_dataset = AudioDataset.train_val_split(
+            input_path=input_path,
+            target_path=target_path,
+            segment_length=4_000,
+            sample_rate=16_000,
+            val_ratio=0.25,
+        )
+
+        assert len(train_dataset) == 3
+        assert len(val_dataset) == 1
+        assert train_dataset.input_audio.shape == train_dataset.target_audio.shape
+        assert val_dataset.input_audio.shape == val_dataset.target_audio.shape
+
     def test_module_applies_latency_to_training_dataset(self, temp_audio_files):
         """The calibration computed by the CLI reaches the actual dataset."""
         input_path, target_path, sample_rate = temp_audio_files

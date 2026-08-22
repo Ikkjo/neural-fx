@@ -1,13 +1,13 @@
-from pathlib import Path
 import warnings
+from pathlib import Path
 from typing import Callable
 
+import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-import torch
-import torchaudio
 
-from ..preprocessing.latency import LatencyCalibrator, LatencyCalibration
+from ..preprocessing.latency import LatencyCalibration
+from .audio import AudioPair, load_audio_pair
 
 
 class AudioDataset(Dataset):
@@ -23,6 +23,8 @@ class AudioDataset(Dataset):
         random_segments: bool = False,
         transform: Callable[[Tensor, Tensor], tuple[Tensor, Tensor]] | None = None,
         latency_calibration: LatencyCalibration | None = None,
+        *,
+        _audio_pair: AudioPair | None = None,
     ):
         """
         Args:
@@ -43,46 +45,15 @@ class AudioDataset(Dataset):
         self.transform = transform
         self.latency_calibration = latency_calibration
 
-        input_path = Path(input_path)
-        target_path = Path(target_path)
-
-        if not input_path.exists():
-            raise FileNotFoundError(f"Input file not found: {input_path}")
-        if not target_path.exists():
-            raise FileNotFoundError(f"Target file not found: {target_path}")
-
-        self.input_audio = self._load_audio(input_path)
-        self.target_audio = self._load_audio(target_path)
-
-        if self.normalize:
-            pair_max = torch.maximum(
-                self.input_audio.abs().max(), self.target_audio.abs().max()
-            )
-            if pair_max > 0:
-                self.input_audio = self.input_audio / pair_max
-                self.target_audio = self.target_audio / pair_max
-
-        # Apply latency compensation if provided
-        if latency_calibration is not None:
-            calibrator = LatencyCalibrator()
-            self.input_audio, self.target_audio = calibrator.compensate(
-                self.input_audio, self.target_audio, latency_calibration
-            )
-            if latency_calibration.delay_samples != 0:
-                warnings.warn(
-                    f"Applied latency compensation of {latency_calibration.delay_samples} samples "
-                    f"(correlation score: {latency_calibration.correlation_score:.4f})"
-                )
-
-        if self.input_audio.shape[-1] != self.target_audio.shape[-1]:
-            min_len = min(self.input_audio.shape[-1], self.target_audio.shape[-1])
-            warnings.warn(
-                f"Input and target audio lengths differ "
-                f"({self.input_audio.shape[-1]} vs {self.target_audio.shape[-1]}). "
-                f"Truncating to {min_len} samples."
-            )
-            self.input_audio = self.input_audio[..., :min_len]
-            self.target_audio = self.target_audio[..., :min_len]
+        audio_pair = _audio_pair or load_audio_pair(
+            input_path,
+            target_path,
+            sample_rate=sample_rate,
+            normalize=normalize,
+            latency_calibration=latency_calibration,
+        )
+        self.input_audio = audio_pair.input_audio
+        self.target_audio = audio_pair.target_audio
 
         self.num_segments = self.input_audio.shape[-1] // segment_length
         if self.num_segments == 0:
@@ -91,17 +62,6 @@ class AudioDataset(Dataset):
                 f"segment_length ({segment_length}). Creating empty dataset."
             )
         self.total_length = self.num_segments * segment_length
-
-    def _load_audio(self, path: Path) -> Tensor:
-        audio, sr = torchaudio.load(str(path))
-
-        if sr != self.sample_rate:
-            audio = torchaudio.functional.resample(audio, sr, self.sample_rate)
-
-        if audio.shape[0] > 1:
-            audio = audio.mean(dim=0, keepdim=True)
-
-        return audio
 
     def __len__(self) -> int:
         return self.num_segments
@@ -156,82 +116,52 @@ class AudioDataset(Dataset):
         Returns:
             Tuple of (train_dataset, val_dataset).
         """
-        input_path = Path(input_path)
-        target_path = Path(target_path)
-
-        if not input_path.exists():
-            raise FileNotFoundError(f"Input file not found: {input_path}")
-        if not target_path.exists():
-            raise FileNotFoundError(f"Target file not found: {target_path}")
-
-        # Load full audio
-        input_audio, sr = torchaudio.load(str(input_path))
-        target_audio, _ = torchaudio.load(str(target_path))
-
-        if sr != sample_rate:
-            input_audio = torchaudio.functional.resample(input_audio, sr, sample_rate)
-            target_audio = torchaudio.functional.resample(target_audio, sr, sample_rate)
-
-        if input_audio.shape[0] > 1:
-            input_audio = input_audio.mean(dim=0, keepdim=True)
-        if target_audio.shape[0] > 1:
-            target_audio = target_audio.mean(dim=0, keepdim=True)
-
-        # Handle length mismatch
-        min_len = min(input_audio.shape[-1], target_audio.shape[-1])
-        input_audio = input_audio[..., :min_len]
-        target_audio = target_audio[..., :min_len]
-
-        if normalize:
-            combined_max = max(input_audio.abs().max(), target_audio.abs().max())
-            if combined_max > 0:
-                input_audio = input_audio / combined_max
-                target_audio = target_audio / combined_max
+        audio_pair = load_audio_pair(
+            input_path,
+            target_path,
+            sample_rate=sample_rate,
+            normalize=normalize,
+        )
 
         # Calculate split point
-        num_segments = min_len // segment_length
+        num_segments = audio_pair.num_samples // segment_length
         val_segments = int(num_segments * val_ratio)
         train_segments = num_segments - val_segments
 
         train_length = train_segments * segment_length
         val_start = train_length
+        val_end = val_start + val_segments * segment_length
 
-        # Split audio
-        train_input = input_audio[..., :train_length]
-        train_target = target_audio[..., :train_length]
-        val_input = input_audio[
-            ..., val_start : val_start + val_segments * segment_length
-        ]
-        val_target = target_audio[
-            ..., val_start : val_start + val_segments * segment_length
-        ]
+        train_pair = AudioPair(
+            audio_pair.input_audio[..., :train_length],
+            audio_pair.target_audio[..., :train_length],
+            sample_rate,
+        )
+        val_pair = AudioPair(
+            audio_pair.input_audio[..., val_start:val_end],
+            audio_pair.target_audio[..., val_start:val_end],
+            sample_rate,
+        )
 
-        # Create datasets
-        train_dataset = cls.__new__(cls)
-        train_dataset.segment_length = segment_length
-        train_dataset.sample_rate = sample_rate
-        train_dataset.normalize = normalize
-        train_dataset.random_segments = random_segments
-        train_dataset.transform = transform
-        # TODO: Could preserve parent's latency_calibration instead of always setting None,
-        # or accept latency_calibration as an explicit parameter to split() method
-        train_dataset.latency_calibration = None
-        train_dataset.input_audio = train_input
-        train_dataset.target_audio = train_target
-        train_dataset.num_segments = train_segments
-        train_dataset.total_length = train_length
-
-        val_dataset = cls.__new__(cls)
-        val_dataset.segment_length = segment_length
-        val_dataset.sample_rate = sample_rate
-        val_dataset.normalize = normalize
-        val_dataset.random_segments = False  # Always sequential for validation
-        val_dataset.transform = None  # No augmentation for validation
-        # TODO: Could preserve parent's latency_calibration instead of always setting None
-        val_dataset.latency_calibration = None
-        val_dataset.input_audio = val_input
-        val_dataset.target_audio = val_target
-        val_dataset.num_segments = val_segments
-        val_dataset.total_length = val_segments * segment_length
+        train_dataset = cls(
+            input_path,
+            target_path,
+            segment_length=segment_length,
+            sample_rate=sample_rate,
+            normalize=normalize,
+            random_segments=random_segments,
+            transform=transform,
+            _audio_pair=train_pair,
+        )
+        val_dataset = cls(
+            input_path,
+            target_path,
+            segment_length=segment_length,
+            sample_rate=sample_rate,
+            normalize=normalize,
+            random_segments=False,
+            transform=None,
+            _audio_pair=val_pair,
+        )
 
         return train_dataset, val_dataset
