@@ -30,24 +30,31 @@ class CausalConv1d(nn.Module):
         self._cache: Tensor | None = None
 
     def forward(self, x: Tensor) -> Tensor:
+        if self.history_size == 0:
+            return self.conv(x)
+        if (
+            self._cache is None
+            or self._cache.shape[:2] != x.shape[:2]
+            or self._cache.device != x.device
+            or self._cache.dtype != x.dtype
+        ):
+            self._cache = x.new_zeros(x.shape[0], x.shape[1], self.history_size)
+        window = torch.cat([self._cache, x], dim=-1)
+        self._cache = window[..., -self.history_size :].detach()
+        return self.conv(window)
+
+    def forward_stateless(self, x: Tensor) -> Tensor:
         return self.conv(F.pad(x, (self.history_size, 0)))
 
     def reset_state(self) -> None:
         self._cache = None
 
     def process_sample(self, x: Tensor) -> Tensor:
-        if self.history_size == 0:
-            return self.conv(x)
-        if (
-            self._cache is None
-            or self._cache.shape[0] != x.shape[0]
-            or self._cache.device != x.device
-            or self._cache.dtype != x.dtype
-        ):
-            self._cache = x.new_zeros(x.shape[0], x.shape[1], self.history_size)
-        window = torch.cat([self._cache, x], dim=-1)
-        self._cache = window[..., 1:].detach()
-        return self.conv(window)
+        return self.forward(x)
+
+    def detach_state(self) -> None:
+        if self._cache is not None:
+            self._cache = self._cache.detach()
 
 
 class DilatedResidualBlock(nn.Module):
@@ -83,16 +90,23 @@ class DilatedResidualBlock(nn.Module):
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         return self._project(x, self.filter_conv(x), self.gate_conv(x))
 
-    def process_sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def forward_stateless(self, x: Tensor) -> tuple[Tensor, Tensor]:
         return self._project(
             x,
-            self.filter_conv.process_sample(x),
-            self.gate_conv.process_sample(x),
+            self.filter_conv.forward_stateless(x),
+            self.gate_conv.forward_stateless(x),
         )
+
+    def process_sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        return self.forward(x)
 
     def reset_state(self) -> None:
         self.filter_conv.reset_state()
         self.gate_conv.reset_state()
+
+    def detach_state(self) -> None:
+        self.filter_conv.detach_state()
+        self.gate_conv.detach_state()
 
 
 class WaveNetModel(BaseNeuralFXModel):
@@ -132,13 +146,13 @@ class WaveNetModel(BaseNeuralFXModel):
             nn.ReLU(),
             nn.Conv1d(self.params.skip_channels, config.output_size, 1),
         )
-        self._input_history: Tensor | None = None
-
-    def _forward_sequence(self, x: Tensor) -> Tensor:
+    def _forward_sequence(self, x: Tensor, *, stateless: bool = False) -> Tensor:
         residual = self.input_projection(x)
         skip_sum: Tensor | None = None
         for block in self.blocks:
-            residual, skip = block(residual)
+            residual, skip = (
+                block.forward_stateless(residual) if stateless else block(residual)
+            )
             skip_sum = skip if skip_sum is None else skip_sum + skip
         if skip_sum is None:
             raise RuntimeError("WaveNet requires at least one residual block")
@@ -155,16 +169,7 @@ class WaveNetModel(BaseNeuralFXModel):
         if detach_state:
             self.detach_state()
 
-        time = x.shape[-1]
-        history_size = self.receptive_field - 1
-        if self._input_history is not None:
-            sequence = torch.cat([self._input_history, x], dim=-1)
-        else:
-            sequence = x
-        output = self._forward_sequence(sequence)[..., -time:]
-        if history_size > 0:
-            self._input_history = sequence[..., -history_size:].detach()
-        return output
+        return self._forward_sequence(x)
 
     def process_sample(self, x: Tensor, reset: bool = False) -> Tensor:
         if reset:
@@ -173,24 +178,16 @@ class WaveNetModel(BaseNeuralFXModel):
             x = x.unsqueeze(0).unsqueeze(-1)
         elif x.ndim == 2:
             x = x.unsqueeze(-1)
-        residual = self.input_projection(x)
-        skip_sum: Tensor | None = None
         with torch.no_grad():
-            for block in self.blocks:
-                residual, skip = block.process_sample(residual)
-                skip_sum = skip if skip_sum is None else skip_sum + skip
-            if skip_sum is None:
-                raise RuntimeError("WaveNet requires at least one residual block")
-            return self.output_projection(skip_sum).squeeze(-1)
+            return self._forward_sequence(x).squeeze(-1)
 
     def reset_state(self) -> None:
-        self._input_history = None
         for block in self.blocks:
             block.reset_state()
 
     def detach_state(self) -> None:
-        if self._input_history is not None:
-            self._input_history = self._input_history.detach()
+        for block in self.blocks:
+            block.detach_state()
 
     @property
     def receptive_field(self) -> int:
@@ -223,7 +220,7 @@ class WaveNetModel(BaseNeuralFXModel):
                 self.model = model
 
             def forward(self, x: Tensor) -> Tensor:
-                return self.model._forward_sequence(x)
+                return self.model._forward_sequence(x, stateless=True)
 
         return ExportWrapper(self)
 

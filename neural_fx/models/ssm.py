@@ -80,7 +80,6 @@ class DiagonalStateSpace(nn.Module):
         return output
 
     def process_sample(self, x: Tensor) -> Tensor:
-        a_bar, b_bar = self._discretize()
         if (
             self._state is None
             or self._state.shape[0] != x.shape[0]
@@ -88,13 +87,18 @@ class DiagonalStateSpace(nn.Module):
             or self._state.dtype != x.dtype
         ):
             self._state = x.new_zeros(x.shape[0], self.d_model, self.d_state)
+        output, self._state = self.transition(x, self._state)
+        return output
+
+    def transition(self, x: Tensor, state: Tensor) -> tuple[Tensor, Tensor]:
+        a_bar, b_bar = self._discretize()
         sample = x.squeeze(-1)
-        self._state = (
-            a_bar.unsqueeze(0) * self._state
+        next_state = (
+            a_bar.unsqueeze(0) * state
             + b_bar.unsqueeze(0) * sample.unsqueeze(-1)
         )
-        output = torch.sum(self.c.unsqueeze(0) * self._state, dim=-1)
-        return (output + self.d.unsqueeze(0) * sample).unsqueeze(-1)
+        output = torch.sum(self.c.unsqueeze(0) * next_state, dim=-1)
+        return (output + self.d.unsqueeze(0) * sample).unsqueeze(-1), next_state
 
     def reset_state(self) -> None:
         self._state = None
@@ -242,18 +246,9 @@ class S4DModel(BaseNeuralFXModel):
                 for index, block in enumerate(self.model.blocks):
                     residual = x
                     normalized = block._normalize(x)
-                    a_bar, b_bar = block.ssm._discretize()
-                    sample = normalized.squeeze(-1)
-                    next_state = (
-                        a_bar.unsqueeze(0) * state[index]
-                        + b_bar.unsqueeze(0) * sample.unsqueeze(-1)
+                    ssm_output, next_state = block.ssm.transition(
+                        normalized, state[index]
                     )
-                    ssm_output = torch.sum(
-                        block.ssm.c.unsqueeze(0) * next_state, dim=-1
-                    )
-                    ssm_output = (
-                        ssm_output + block.ssm.d.unsqueeze(0) * sample
-                    ).unsqueeze(-1)
                     x = block._finish(residual, ssm_output)
                     next_states.append(next_state)
                 return self.model.output_projection(x), torch.stack(next_states)

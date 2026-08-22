@@ -62,20 +62,13 @@ class TestRecurrentModels:
         model = NeuralfxLSTM(lstm_config)
         x = torch.randn(1, 1, 100)
 
-        # Run once to populate state
+        expected = model(x, reset_state=True)
         model(x)
-        assert model.hidden_state is not None
-
-        # Detach
         model.detach_state()
-        if isinstance(model.hidden_state, tuple):
-            assert not model.hidden_state[0].requires_grad
-        else:
-            assert not model.hidden_state.requires_grad
-
-        # Reset
         model.reset_state()
-        assert model.hidden_state is None
+        actual = model(x)
+
+        torch.testing.assert_close(actual, expected)
 
     def test_process_sample(self, lstm_config):
         """Test single sample processing."""
@@ -87,7 +80,6 @@ class TestRecurrentModels:
         y = model.process_sample(x)
 
         assert y.ndim == 0 or y.ndim == 1
-        assert model.hidden_state is not None
 
     def test_causal_conv_matches_block_and_sample_streaming(self):
         """Causal strided convolution is independent of future block layout."""

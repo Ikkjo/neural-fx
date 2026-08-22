@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from neural_fx.config import ModelConfig, WaveNetParams, load_config
+from neural_fx.inference import StreamingProcessor
 from neural_fx.models import WaveNetModel, create_model_from_config
 
 
@@ -61,6 +62,48 @@ def test_chunked_and_sample_inference_match_full_sequence() -> None:
     torch.testing.assert_close(sampled, full, atol=1e-6, rtol=1e-5)
 
 
+def test_stream_history_survives_block_then_sample_processing() -> None:
+    torch.manual_seed(20260822)
+    model = _model()
+    x = torch.randn(1, 1, 48)
+    with torch.inference_mode():
+        expected = model(x, reset_state=True)
+
+    processor = StreamingProcessor(model)
+    block = processor.process_block(x[..., :17])
+    samples = torch.tensor(
+        [processor.process_sample(float(x[..., index])) for index in range(17, 48)]
+    ).reshape(1, 1, -1)
+
+    torch.testing.assert_close(
+        torch.cat((block, samples), dim=-1),
+        expected,
+        atol=1e-6,
+        rtol=1e-5,
+    )
+
+
+def test_stream_history_survives_sample_then_block_processing() -> None:
+    torch.manual_seed(20260822)
+    model = _model()
+    x = torch.randn(1, 1, 48)
+    with torch.inference_mode():
+        expected = model(x, reset_state=True)
+
+    processor = StreamingProcessor(model)
+    samples = torch.tensor(
+        [processor.process_sample(float(x[..., index])) for index in range(17)]
+    ).reshape(1, 1, -1)
+    block = processor.process_block(x[..., 17:])
+
+    torch.testing.assert_close(
+        torch.cat((samples, block), dim=-1),
+        expected,
+        atol=1e-6,
+        rtol=1e-5,
+    )
+
+
 def test_wavenet_config_and_torchscript_export(tmp_path: Path) -> None:
     config = load_config("configs/models/wavenet/wavenet_nano.yaml")
     model = create_model_from_config(config.model).eval()
@@ -71,7 +114,7 @@ def test_wavenet_config_and_torchscript_export(tmp_path: Path) -> None:
     x = torch.randn(1, 1, 64)
 
     with torch.no_grad():
-        expected = model._forward_sequence(x)
+        expected = model._forward_sequence(x, stateless=True)
         actual = exported(x)
 
     assert config.model.params.layers == 6
@@ -93,5 +136,5 @@ def test_wavenet_onnx_export_matches_pytorch(tmp_path: Path) -> None:
     actual = torch.from_numpy(session.run(None, {"input": x.numpy()})[0])
 
     with torch.no_grad():
-        expected = model._forward_sequence(x)
+        expected = model._forward_sequence(x, stateless=True)
     torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-5)

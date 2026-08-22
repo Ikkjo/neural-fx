@@ -125,7 +125,7 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         self.fc_out = nn.Linear(self.params.hidden_size, config.output_size)
 
         # Hidden State
-        self.hidden_state = None
+        self._hidden_state = None
         self._conv_input_buffer: Tensor | None = None
         self._conv_stride_phase = 0
         self._upsample_overlap: Tensor | None = None
@@ -192,8 +192,8 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
             x = x.transpose(1, 2)
 
             # Run RNN
-            x, new_state = self.rnn(x, self.hidden_state)
-            self.hidden_state = new_state
+            x, new_state = self.rnn(x, self._hidden_state)
+            self._hidden_state = new_state
 
             # FC and back to [Batch, Channels, Time]
             x = self.fc_out(x).transpose(1, 2)
@@ -270,17 +270,17 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
         return current
 
     def reset_state(self) -> None:
-        self.hidden_state = None
+        self._hidden_state = None
         self._conv_input_buffer = None
         self._conv_stride_phase = 0
         self._upsample_overlap = None
 
     def detach_state(self) -> None:
-        if self.hidden_state is not None:
-            if isinstance(self.hidden_state, tuple):
-                self.hidden_state = tuple(h.detach() for h in self.hidden_state)
+        if self._hidden_state is not None:
+            if isinstance(self._hidden_state, tuple):
+                self._hidden_state = tuple(h.detach() for h in self._hidden_state)
             else:
-                self.hidden_state = self.hidden_state.detach()
+                self._hidden_state = self._hidden_state.detach()
         if self._conv_input_buffer is not None:
             self._conv_input_buffer = self._conv_input_buffer.detach()
         if self._upsample_overlap is not None:
