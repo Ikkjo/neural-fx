@@ -60,63 +60,56 @@ class NeuralFXModule(L.LightningModule):
                 noise_p=config.training.augmentation.noise_p,
             )
 
-    def _build_loss(self, loss_config: LossConfig):
-        """Build loss function from config."""
-        # Initialize STFT loss if enabled
+    def _build_loss(
+        self, loss_config: LossConfig
+    ) -> Callable[[Tensor, Tensor], Tensor]:
+        weights = loss_config.weights
+        if weights is None:
+            return MSE
+
+        esr_weight = weights.esr
+        mse_weight = weights.mse
+        stft_weight = weights.stft
+        if any(weight < 0 for weight in (esr_weight, mse_weight, stft_weight)):
+            raise ValueError("Loss weights must be non-negative")
+        if esr_weight == mse_weight == stft_weight == 0:
+            raise ValueError("At least one loss weight must be positive")
+
         stft_loss_fn: MultiResolutionSTFTLoss | None = None
-        if loss_config.stft and loss_config.stft.enabled:
-            # Ensure fft_sizes is not None before passing
-            fft_sizes = loss_config.stft.fft_sizes or [512, 1024, 2048]
-            hop_sizes = loss_config.stft.hop_sizes
-            win_sizes = loss_config.stft.win_sizes
+        if stft_weight > 0:
+            if loss_config.stft is None or not loss_config.stft.enabled:
+                raise ValueError("STFT loss weight requires an enabled STFT loss")
             stft_loss_fn = MultiResolutionSTFTLoss(
-                fft_sizes=fft_sizes,
-                hop_sizes=hop_sizes,
-                win_sizes=win_sizes,
+                fft_sizes=loss_config.stft.fft_sizes,
+                hop_sizes=loss_config.stft.hop_sizes,
+                win_sizes=loss_config.stft.win_sizes,
                 sc_loss_weight=loss_config.stft.sc_weight,
                 mag_loss_weight=loss_config.stft.mag_weight,
             )
 
+        pre_emphasis = loss_config.pre_emphasis
+        pre_emphasis_coeff = (
+            pre_emphasis.coef
+            if pre_emphasis is not None and pre_emphasis.enabled
+            else None
+        )
+
         def loss_fn(pred: Tensor, target: Tensor) -> Tensor:
-            loss = torch.tensor(0.0, device=pred.device)
-
-            weights = loss_config.weights
-            if weights is None:
-                # Default to MSE only
-                return MSE(pred, target)
-
-            # Get weight values with defaults
-            esr_weight = getattr(weights, "esr", 0.0)
-            mse_weight = getattr(weights, "mse", 1.0)
-            stft_weight = getattr(weights, "stft", 0.0)
-
-            # ESR loss
+            terms: list[Tensor] = []
             if esr_weight > 0:
-                pre_emphasis = loss_config.pre_emphasis
-                coeff = (
-                    pre_emphasis.coef
-                    if pre_emphasis is not None and pre_emphasis.enabled
-                    else None
+                terms.append(
+                    esr_weight
+                    * ESR(
+                        pred,
+                        target,
+                        pre_emphasis_coeff=pre_emphasis_coeff,
+                    )
                 )
-                loss = loss + esr_weight * ESR(
-                    pred,
-                    target,
-                    pre_emphasis_coeff=coeff,
-                )
-
-            # MSE loss
             if mse_weight > 0:
-                loss = loss + mse_weight * MSE(pred, target)
-
-            # Multi-resolution STFT loss
-            if stft_weight > 0 and stft_loss_fn is not None:
-                loss = loss + stft_weight * stft_loss_fn(pred, target)
-
-            # Default to MSE if no weights specified
-            if loss.item() < 1e-8:
-                loss = MSE(pred, target)
-
-            return loss
+                terms.append(mse_weight * MSE(pred, target))
+            if stft_loss_fn is not None:
+                terms.append(stft_weight * stft_loss_fn(pred, target))
+            return sum(terms[1:], start=terms[0])
 
         return loss_fn
 

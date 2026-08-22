@@ -32,7 +32,7 @@ from neural_fx.data.transforms import (
     RandomGain,
     build_augmentation_transform,
 )
-from neural_fx.losses.audio_losses import ESR, MultiResolutionSTFTLoss
+from neural_fx.losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
 from neural_fx.models import (
     MODEL_REGISTRY,
     create_model_from_config,
@@ -481,19 +481,41 @@ class TestUpdatedLossWeights:
         assert isinstance(loss, torch.Tensor)
 
     def test_stft_loss_disabled(self, base_config):
-        """Test that disabled STFT loss is not used."""
+        """A positive STFT weight requires an enabled STFT loss."""
         base_config.loss.weights = LossWeights(esr=0.0, mse=1.0, stft=0.5)
         base_config.loss.stft = STFTLossConfig(enabled=False)
 
         model = NeuralfxLSTM(base_config.model)
-        module = NeuralFXModule(model, base_config)
+        with pytest.raises(ValueError, match="STFT loss weight requires"):
+            NeuralFXModule(model, base_config)
 
-        x = torch.randn(2, 2048)
-        y = torch.randn(2, 2048)
+    def test_small_weighted_loss_keeps_configured_weight(self, base_config):
+        base_config.loss.weights = LossWeights(esr=0.0, mse=0.1, stft=0.0)
+        module = NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
+        prediction = torch.tensor([1.0], requires_grad=True)
+        target = torch.tensor([1.0002])
 
-        # Should not raise error even with stft weight > 0 but disabled
-        loss = module.training_step((x, y), batch_idx=0)
-        assert loss is not None
+        actual = module.loss_fn(prediction, target)
+        expected = 0.1 * MSE(prediction, target)
+
+        assert torch.allclose(actual, expected, rtol=1e-6, atol=0.0)
+
+    @pytest.mark.parametrize("field", ["esr", "mse", "stft"])
+    def test_negative_loss_weight_is_rejected(self, base_config, field):
+        weights = LossWeights(esr=0.0, mse=0.0, stft=0.0)
+        setattr(weights, field, -0.1)
+        base_config.loss.weights = weights
+
+        with pytest.raises(ValueError, match="Loss weights must be non-negative"):
+            NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
+
+    def test_explicit_zero_loss_weights_are_rejected(self, base_config):
+        base_config.loss.weights = LossWeights(esr=0.0, mse=0.0, stft=0.0)
+
+        with pytest.raises(
+            ValueError, match="At least one loss weight must be positive"
+        ):
+            NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
 
     def test_esr_uses_configured_pre_emphasis(self, base_config):
         """The configured coefficient must reach the ESR calculation."""
