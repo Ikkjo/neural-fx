@@ -3,77 +3,22 @@
 import argparse
 import json
 import sys
-import warnings
 from pathlib import Path
-
-import torch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from neural_fx.analysis.plotting import TrainingAnalyzer
-from neural_fx.config import config_from_dict, load_config
+from neural_fx.artifacts import load_model
 from neural_fx.data.dataset import AudioDataset
-from neural_fx.models import create_model_from_config
 
 
 def load_checkpoint(checkpoint_path: str, config_path: str | None = None):
-    """Load model from checkpoint.
-
-    Args:
-        checkpoint_path: Path to checkpoint file.
-
-    Returns:
-        Tuple of (model, config).
-    """
-    checkpoint_path = Path(checkpoint_path)
-
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-
-    # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-    # Prefer an explicit config, then the self-contained checkpoint, then metadata.
-    meta_path = checkpoint_path.with_suffix(".meta.json")
-    metadata = None
-    if meta_path.exists():
-        with open(meta_path) as f:
-            metadata = json.load(f)
-
-    if config_path is not None:
-        config = load_config(config_path)
-    elif "neural_fx_config" in checkpoint:
-        config = config_from_dict(checkpoint["neural_fx_config"])
-    elif metadata is not None and "config" in metadata:
-        config = config_from_dict(metadata["config"])
-    else:
-        raise ValueError(
-            "Checkpoint does not contain a complete neural-fx configuration. "
-            "Pass --config for legacy checkpoints."
-        )
-
-    # Create model
-    model = create_model_from_config(config.model)
-
-    # Load state dict
-    if "state_dict" in checkpoint:
-        # Extract model state dict (remove "model." prefix)
-        model_state = {
-            k.replace("model.", ""): v
-            for k, v in checkpoint["state_dict"].items()
-            if k.startswith("model.")
-        }
-        model.load_state_dict(model_state)
-    else:
-        warnings.warn(
-            "No 'state_dict' found in checkpoint. Using randomly initialized weights."
-        )
-
-    # Set model to evaluation mode
-    model.eval()
-
-    return model, config
+    loaded = load_model(
+        checkpoint_path=checkpoint_path,
+        config_path=config_path,
+    )
+    return loaded.model, loaded.config
 
 
 def main():

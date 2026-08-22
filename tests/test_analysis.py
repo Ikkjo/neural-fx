@@ -22,6 +22,7 @@ from neural_fx.config import (
     NeuralFXConfig,
     OptimizerConfig,
     TrainingConfig,
+    load_config,
 )
 from neural_fx.data.dataset import AudioDataset
 from neural_fx.models import create_model_from_config
@@ -215,6 +216,24 @@ class TestTrainingAnalyzer:
         assert loaded_config == config
         assert loaded_model.config.type == "gru"
         assert loaded_model.sample_rate == 44100
+
+    def test_checkpoint_loads_raw_state_with_explicit_config(self, tmp_path):
+        config_path = Path("configs/models/lstm/lstm_nano.yaml")
+        config = load_config(config_path)
+        model = create_model_from_config(config.model)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.fill_(0.25)
+        checkpoint_path = tmp_path / "raw-state.pt"
+        torch.save(model.state_dict(), checkpoint_path)
+
+        loaded_model, loaded_config = load_checkpoint(
+            str(checkpoint_path), str(config_path)
+        )
+
+        assert loaded_config == config
+        for name, value in model.state_dict().items():
+            assert torch.equal(loaded_model.state_dict()[name], value)
 
 
 if __name__ == "__main__":
