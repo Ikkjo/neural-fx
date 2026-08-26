@@ -89,6 +89,25 @@ def test_sample_rate_defaults_to_48000(tmp_path: Path) -> None:
     assert config.sample_rate == 48000
 
 
+@pytest.mark.parametrize(
+    ("training", "expected"),
+    [({}, False), ({"compile": True}, True)],
+)
+def test_training_compile_setting(training: dict, expected: bool) -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "compile-setting",
+            "model": {"type": "lstm", "params": {"hidden_size": 8}},
+            "training": training,
+            "loss": {"type": "mse"},
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+        }
+    )
+
+    assert config.training.compile is expected
+
+
 @pytest.mark.parametrize("sample_rate", [44100, 48000])
 def test_calibration_duration_converts_to_five_seconds(
     tmp_path: Path,

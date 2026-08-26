@@ -10,7 +10,7 @@ from lightning.pytorch.callbacks import Callback
 from ..artifacts import load_model
 from ..config import NeuralFXConfig
 from ..data.dataset import AudioDataset
-from ..models import create_model_from_config
+from ..models import BaseNeuralFXModel, create_model_from_config
 from ..preprocessing.latency import LatencyCalibration, LatencyCalibrator
 from ..preprocessing.validation import DataValidator
 from .callbacks import NeuralFXCheckpoint, ValidationEarlyStopping
@@ -46,6 +46,7 @@ class TrainingRun:
         val_check_interval: float = 1.0,
         log_every_n_steps: int = 50,
         max_epochs: int | None = None,
+        compile: bool | None = None,
         latency_method: str | None = None,
         latency_manual: int | None = None,
     ) -> "TrainingRun":
@@ -62,7 +63,11 @@ class TrainingRun:
         )
         resolved_config = replace(
             config,
-            training=replace(config.training, epochs=epochs),
+            training=replace(
+                config.training,
+                epochs=epochs,
+                compile=config.training.compile if compile is None else compile,
+            ),
             latency=replace(
                 config.latency,
                 method=latency_method,
@@ -91,6 +96,23 @@ class TrainingResult:
 
 class TrainingDataValidationError(RuntimeError):
     """Training cannot start because required data validation failed."""
+
+
+def _validate_compile_request(run: TrainingRun) -> None:
+    if not run.config.training.compile:
+        return
+    if run.gpus > 1:
+        raise ValueError("Compiled training supports at most one GPU")
+    tbptt = run.config.training.tbptt
+    if tbptt is not None and tbptt.enabled:
+        raise ValueError("Compiled training does not support TBPTT")
+
+
+def _create_training_model(config: NeuralFXConfig) -> BaseNeuralFXModel:
+    model = create_model_from_config(config.model)
+    if config.training.compile:
+        model.compile()
+    return model
 
 
 def run_latency_calibration(
@@ -278,6 +300,9 @@ def _generate_plots(
 
 def run_training(run: TrainingRun) -> TrainingResult:
     config = run.config
+    _validate_compile_request(run)
+    execution = "compiled" if config.training.compile else "eager"
+    print(f"Training execution: {execution}")
     _configure_determinism(config)
     input_path = config.data.train.input
     target_path = config.data.train.target
@@ -290,7 +315,7 @@ def run_training(run: TrainingRun) -> TrainingResult:
         if config.data.val is not None
         else None
     )
-    model = create_model_from_config(config.model)
+    model = _create_training_model(config)
     module = NeuralFXModule(
         model,
         config,
