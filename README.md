@@ -11,6 +11,7 @@ Real-time guitar effect and amp modelling using neural networks (LSTM, GRU, Wave
 - **Conditioning**: Support for gain knob and other control parameters
 - **Export**: ONNX, TorchScript, and RTNeural JSON formats for deployment
 - **Inference**: Real-time streaming processor for single-sample and block processing
+- **Offline monitoring**: Reproducible quality and performance reports for fixed audio suites
 
 ## Quick Start
 
@@ -79,6 +80,11 @@ The shipped LSTM/GRU configs use strided convolution and support ONNX and
 TorchScript export. RTNeural JSON is limited to unconditioned recurrent+dense
 graphs without strided upsampling or residual skip connections; unsupported
 formats are skipped with an explanation.
+
+### Offline Monitoring
+
+Use `scripts/monitor.py` to evaluate a checkpoint or TorchScript export against
+a fixed audio suite. See [the offline monitoring guide](docs/monitoring.md).
 
 ## Model Configurations
 

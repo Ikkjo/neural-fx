@@ -36,13 +36,24 @@ def load_audio_pair(
     sample_rate: int = 48_000,
     normalize: bool = True,
     latency_calibration: LatencyCalibration | None = None,
+    strict: bool = False,
 ) -> AudioPair:
+    """Load an audio pair, optionally preserving both native tensors unchanged."""
     input_path = Path(input_path)
     target_path = Path(target_path)
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
     if not target_path.exists():
         raise FileNotFoundError(f"Target file not found: {target_path}")
+
+    if strict:
+        input_audio, input_rate = torchaudio.load(input_path)
+        target_audio, target_rate = torchaudio.load(target_path)
+        if input_rate != sample_rate or target_rate != sample_rate:
+            raise ValueError(
+                f"Expected {sample_rate} Hz; input={input_rate}, target={target_rate}"
+            )
+        return AudioPair(input_audio, target_audio, sample_rate)
 
     input_audio = _load_mono(input_path, sample_rate)
     target_audio = _load_mono(target_path, sample_rate)

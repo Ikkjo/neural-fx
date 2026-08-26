@@ -1,0 +1,21 @@
+schema_version: "1.0"
+suite_id: "example-fixed-suite"
+sample_rate: 48000
+channels: 1
+segment_length: 48000
+burn_in_samples: 4096
+inference_chunk_size: 8192
+latency_block_sizes: [128, 512]
+warmup_runs: 2
+measurement_runs: 10
+quality_metrics: [esr, mse, multi_resolution_stft_distance]
+esr_pre_emphasis: 0.85
+clipping_threshold: 0.999
+max_abs: 1.0
+allow_target_full_scale: false
+cases:
+  - id: "clean-reference"
+    input: "../../data/monitoring/input.wav"
+    target: "../../data/monitoring/target.wav"
+    start_sample: 0
+    num_samples: 48000
