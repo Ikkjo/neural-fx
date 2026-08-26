@@ -18,6 +18,7 @@ training:
   batch_size: 16
   epochs: 100
   segment_length: 8192
+  compile: true
   num_workers: 4
 
 optimizer:

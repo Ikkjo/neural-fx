@@ -59,6 +59,24 @@ tensorboard --logdir lightning_logs
 For short experiments, pass `--log_every_n_steps 1` to update both loggers on
 every training batch. The default interval is 50 steps.
 
+### Compiled Training
+
+Enable PyTorch compilation for a training run with `--compile` or with
+`training.compile: true` in its YAML configuration. `--no-compile` overrides a
+configuration that enables it. Configurations that omit the setting remain
+eager by default.
+
+The shipped WaveNet configurations enable compilation because it reduced
+warmed optimizer-step and epoch time by about 20% on the issue #40 RTX 3050
+workload. The measured recurrent and S4D workloads remain eager by default.
+Compilation has extra first-run cost; later processes can reuse PyTorch's local
+compiler cache. Set `TORCHINDUCTOR_CACHE_DIR` when the cache needs an explicit
+location.
+
+Compiled training supports CPU or one CUDA device and does not support enabled
+TBPTT. Multi-GPU and TBPTT requests fail before training, and compiler failures
+are reported instead of silently retrying in eager mode.
+
 ### Exporting a Trained Model
 
 ```bash

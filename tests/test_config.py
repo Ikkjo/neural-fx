@@ -108,6 +108,17 @@ def test_training_compile_setting(training: dict, expected: bool) -> None:
     assert config.training.compile is expected
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        Path("configs/models/wavenet/wavenet_nano.yaml"),
+        Path("configs/models/wavenet/wavenet_small.yaml"),
+    ],
+)
+def test_shipped_wavenet_configs_enable_compiled_training(path: Path) -> None:
+    assert load_config(path).training.compile is True
+
+
 @pytest.mark.parametrize("sample_rate", [44100, 48000])
 def test_calibration_duration_converts_to_five_seconds(
     tmp_path: Path,
