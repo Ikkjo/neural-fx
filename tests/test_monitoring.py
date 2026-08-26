@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -332,3 +335,73 @@ def test_target_full_scale_fails_without_override(tmp_path: Path) -> None:
         )
 
     assert error.value.category == "validation"
+
+
+def _run_monitor_command(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(repo_root)
+    return subprocess.run(
+        [sys.executable, str(repo_root / "scripts" / "monitor.py"), *arguments],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+
+def test_monitor_command_writes_required_outputs(tmp_path: Path) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+        quality_metrics=["mse"],
+    )
+    _write_audio(tmp_path)
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path)
+    output_dir = tmp_path / "result"
+
+    result = _run_monitor_command(
+        [
+            "--manifest",
+            str(manifest_path),
+            "--artifact",
+            str(checkpoint_path),
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--html",
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads((output_dir / "monitoring.json").read_text())[
+        "schema_version"
+    ] == "1.0"
+    assert (output_dir / "monitoring.csv").is_file()
+    assert (output_dir / "monitoring.html").is_file()
+
+
+def test_monitor_command_returns_two_for_expected_failure(tmp_path: Path) -> None:
+    manifest_path = _write_suite(tmp_path)
+    _write_audio(tmp_path, sample_rate=44_100)
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path)
+    output_dir = tmp_path / "result"
+
+    result = _run_monitor_command(
+        [
+            "--manifest",
+            str(manifest_path),
+            "--artifact",
+            str(checkpoint_path),
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert result.returncode == 2
+    assert "Expected 48000 Hz" in result.stderr
+    assert not output_dir.exists()
