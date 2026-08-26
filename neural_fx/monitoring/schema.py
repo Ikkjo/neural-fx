@@ -355,7 +355,7 @@ def load_monitoring_manifest(path: str | Path) -> MonitoringManifest:
         raise MonitoringError(str(exc), category="manifest") from exc
 
 
-def _sha256_file(path: Path) -> str:
+def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     try:
         with path.open("rb") as handle:
@@ -373,8 +373,8 @@ def monitoring_case_hashes(manifest: MonitoringManifest) -> list[dict[str, Any]]
     return [
         {
             "id": case.case_id,
-            "input_sha256": _sha256_file(case.input_path),
-            "target_sha256": _sha256_file(case.target_path),
+            "input_sha256": sha256_file(case.input_path),
+            "target_sha256": sha256_file(case.target_path),
             "start_sample": case.start_sample,
             "num_samples": case.num_samples,
         }
