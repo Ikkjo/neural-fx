@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import resource
 import statistics
 import sys
 import time
@@ -20,6 +19,11 @@ from ..config import NeuralFXConfig, load_config
 from ..inference import run_inference
 from ..losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
 from .schema import MonitoringError, MonitoringManifest
+
+try:
+    import resource
+except ModuleNotFoundError:  # Windows does not provide this module.
+    resource = None
 
 
 @dataclass(frozen=True)
@@ -225,6 +229,8 @@ def quality_metrics(
     return metrics
 
 
-def peak_rss_bytes() -> int:
+def peak_rss_bytes() -> int | None:
+    if resource is None:
+        return None
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return int(peak if sys.platform == "darwin" else peak * 1024)

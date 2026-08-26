@@ -265,6 +265,29 @@ def test_checkpoint_monitoring_produces_required_measurements(tmp_path: Path) ->
     assert report.suite["validation_passed"] is True
 
 
+def test_monitoring_marks_process_memory_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+        quality_metrics=["mse"],
+    )
+    _write_audio(tmp_path)
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path)
+    monkeypatch.setattr("neural_fx.monitoring.pipeline.peak_rss_bytes", lambda: None)
+
+    report = monitor_artifact(
+        manifest_path,
+        checkpoint_path,
+        config_path=config_path,
+    )
+
+    assert report.aggregate["metrics"]["peak_memory_bytes"] is None
+    assert report.aggregate["memory"]["kind"] == "unavailable"
+
+
 def test_torchscript_uses_the_same_monitoring_interface(tmp_path: Path) -> None:
     manifest_path = _write_suite(tmp_path, quality_metrics=["mse"])
     _write_audio(tmp_path)

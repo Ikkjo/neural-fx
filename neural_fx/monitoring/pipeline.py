@@ -302,6 +302,9 @@ def monitor_artifact(
     if resolved_device.type == "cuda":
         peak_memory = int(torch.cuda.max_memory_allocated(resolved_device))
         memory_kind = "cuda_peak_allocated_bytes"
+    elif process_peak is None:
+        peak_memory = None
+        memory_kind = "unavailable"
     else:
         peak_memory = process_peak
         memory_kind = "process_peak_rss_bytes"
@@ -311,7 +314,9 @@ def monitor_artifact(
         "p50_latency_ms": float(full_latency["p50_latency_ms"]),
         "p95_latency_ms": float(full_latency["p95_latency_ms"]),
         "real_time_factor": float(full_latency["real_time_factor"]),
-        "peak_memory_bytes": float(peak_memory),
+        "peak_memory_bytes": (
+            float(peak_memory) if peak_memory is not None else None
+        ),
         "artifact_size_bytes": float(artifact_size),
     }
     device_name = (
