@@ -29,6 +29,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use")
     parser.add_argument("--max_epochs", type=int, help="Override max epochs")
     parser.add_argument(
+        "--compile",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable compiled model training",
+    )
+    parser.add_argument(
         "--checkpoint_dir",
         type=Path,
         default=Path("./lightning_logs"),
@@ -94,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         val_check_interval=args.val_check_interval,
         log_every_n_steps=args.log_every_n_steps,
         max_epochs=args.max_epochs,
+        compile=args.compile,
         latency_method=args.latency_method,
         latency_manual=args.latency_manual,
     )

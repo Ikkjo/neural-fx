@@ -111,6 +111,7 @@ class TrainingConfig:
     tbptt: TBPTTConfig | None = None
     seed: int = 42
     deterministic: bool = False
+    compile: bool = False
     early_stopping: bool = True
     augmentation: AugmentationConfig | None = None
     num_workers: int = 4
@@ -355,6 +356,7 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             else None,
             seed=training_cfg.get("seed", 42),
             deterministic=training_cfg.get("deterministic", False),
+            compile=training_cfg.get("compile", False),
             early_stopping=training_cfg.get("early_stopping", True),
             augmentation=augmentation,
             num_workers=training_cfg.get("num_workers", 4),
