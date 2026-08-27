@@ -1,49 +1,68 @@
 # Offline monitoring
 
-Use `scripts/monitor.py` to evaluate one checkpoint or TorchScript artifact against a fixed audio suite. This command does not monitor a live service.
+Offline monitoring checks one checkpoint or TorchScript artifact against a fixed audio suite. It does not monitor a live service.
 
-Copy `configs/monitoring/offline-suite.example.yaml`, then edit the input and target paths. The command resolves relative paths from the manifest directory.
+Use the same suite for each new artifact. The suite fingerprint identifies the workload and complete audio contents.
 
-Each audio file must use the sample rate and channel count declared in the manifest. The command does not resample, mix, normalize, or align audio.
+## Create a suite
 
-## Checkpoint
+Copy the tracked example:
 
 ```bash
-python scripts/monitor.py \
-  --manifest configs/monitoring/my-suite.yaml \
-  --artifact checkpoints/model.ckpt \
-  --output-dir monitoring/checkpoint
+cp configs/monitoring/offline-suite.example.yaml \
+  configs/monitoring/my-suite.yaml
 ```
 
-Use `--config` if the checkpoint has no embedded configuration or sidecar configuration file.
+Edit the case paths and workload settings. Relative paths start from the manifest directory.
 
-## TorchScript
+Each file must match the declared sample rate and channel count. Monitoring does not resample, mix, normalize, or align audio.
+
+The manifest controls the segment length, burn-in, inference chunks, latency blocks, warm-up runs, measured runs, quality metrics, amplitude limits, and ordered cases.
+
+## Monitor a checkpoint
 
 ```bash
 python scripts/monitor.py \
   --manifest configs/monitoring/my-suite.yaml \
-  --artifact exports/model.pt \
+  --artifact lightning_logs/lstm_small/last.ckpt \
+  --output-dir monitoring/lstm-small
+```
+
+Pass `--config` when the checkpoint has no embedded config or valid sidecar.
+
+## Monitor a TorchScript artifact
+
+```bash
+python scripts/monitor.py \
+  --manifest configs/monitoring/my-suite.yaml \
+  --artifact exports/lstm_small/lstm_small.pt \
   --artifact-type torchscript \
-  --config configs/models/lstm/lstm_nano.yaml \
-  --output-dir monitoring/torchscript \
+  --config configs/models/lstm/lstm_small.yaml \
+  --output-dir monitoring/lstm-small-torchscript \
   --html
 ```
 
-A TorchScript artifact requires a neural-fx configuration file. Version 1 supports unconditioned LSTM, GRU, WaveNet, and S4 exports.
+TorchScript monitoring needs the neural-fx model config. Version 1 supports unconditioned LSTM, GRU, WaveNet, and S4D artifacts.
 
-## Report
+## Outputs
 
-A successful run writes `monitoring.json` and `monitoring.csv`. Add `--html` to write `monitoring.html`.
+A successful run writes:
 
-The version `1.0` JSON report contains:
+- `monitoring.json`
+- `monitoring.csv`
+- `monitoring.html` when `--html` is present
 
-- suite and audio fingerprints
-- artifact and effective configuration hashes
-- runtime and device identity
-- preflight checks and warnings
-- per-case ESR, MSE, MR-STFT, latency, and real-time factor
-- aggregate quality, latency, artifact size, parameter count, and supported memory measurements
+The version 1.0 report records:
 
-The suite fingerprint covers the workload settings, ordered case slices, and complete audio file hashes. File locations do not affect the fingerprint.
+- Suite and audio fingerprints
+- Artifact and config hashes
+- Runtime and device identity
+- Preflight results and warnings
+- Per-case ESR, MSE, MR-STFT, latency, and real-time factor
+- Aggregate quality, latency, artifact size, parameter count, and supported memory measurements
 
-The command returns exit code `0` after a successful run. It returns `2` for expected monitoring errors and `1` for unexpected errors.
+The suite fingerprint covers workload settings, ordered case slices, and complete audio hashes. Moving the same files does not change it.
+
+The command returns 0 after success. It returns 2 for expected monitoring errors and 1 for unexpected failures.
+
+Monitoring reports describe each artifact. They do not apply a baseline regression policy or select a preferred model.

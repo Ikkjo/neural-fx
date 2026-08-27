@@ -24,8 +24,3 @@ notebooks/lightning_logs/
 *.pt
 *.pth.tar
 events.out.tfevents.*
-
-# Saved models directory (keep structure, ignore contents)
-saved_models/*
-!saved_models/.gitkeep
-!saved_models/README.md

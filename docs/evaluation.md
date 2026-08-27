@@ -1,104 +1,87 @@
-# Benchmarking and model comparison
+# Evaluation and inference benchmarks
 
-Run one model per process so the CPU peak-RSS value is comparable between models:
+Use controlled evaluation to measure model quality on one held-out audio segment. Use inference benchmarks to measure runtime behavior.
 
-```bash
-python scripts/benchmark.py \
-  --config configs/models/lstm/lstm_nano.yaml \
-  --checkpoint path/to/model.ckpt \
-  --output results/lstm_nano.json \
-  --device cpu \
-  --threads 2
-```
-
-The checkpoint is optional for performance-only measurements. The script excludes
-warm-up runs, synchronizes CUDA around timed regions, and measures both whole-file
-and stateful block inference. Each JSON result includes the model input, workload,
-runtime environment, latency distribution, real-time factor, deadline misses,
-model-state size, and process peak memory.
-
-New training checkpoints embed the complete neural-fx configuration. For those
-checkpoints, `--config` can be omitted. Keep passing `--config` for an untrained
-performance run or a legacy checkpoint.
-
-Create a comparison table directly from result files:
-
-```bash
-python scripts/compare_benchmarks.py results/*.json --output results/comparison.md
-```
-
-Do not use performance results from an untrained model as evidence of model
-quality. Performance generally depends on architecture and size, but quality
-metrics require a trained checkpoint and the controlled evaluation workflow.
+Do not use an untrained benchmark model as quality evidence.
 
 ## Controlled quality evaluation
 
-Record each experiment in a manifest. Paths can be absolute or relative to the
-manifest:
+Copy the [evaluation manifest example](examples/evaluation-manifest.yaml). Resolve its paths relative to the manifest file.
 
-```yaml
-schema_version: "1.0"
-experiment_id: lstm-nano-seed-42
-run_kind: final  # use smoke for partial workflow-validation runs
-# Reset model state once, then retain it across sequential chunks.
-inference_chunk_size: 65536
-# Use the same post-reset burn-in for every architecture.
-burn_in_samples: 4096
-model:
-  # Optional for new checkpoints that embed neural_fx_config.
-  config: ../../configs/models/lstm/lstm_nano.yaml
-  checkpoint: checkpoints/lstm-nano-seed-42.ckpt
-  benchmark_result: results/lstm_nano.json
-dataset:
-  input_audio: data/DI.wav
-  target_audio: data/pearl_clean_sm57.wav
-  split: test
-  start_sample: 480000
-  num_samples: 144000
-  latency_samples: 0
-  normalization: paired_peak
-  # Optional shared comparison window; defaults to checkpoint loss.mask_first.
-  metric_mask_first: 4096
-training:
-  seed: 42
-  epochs: 100
-  early_stopping: val_loss
-notes: Held-out temporal test split.
-```
+Each final comparison must use the same aligned input, target, segment, latency correction, and metric window. Give smoke runs `run_kind: smoke`. Use `run_kind: final` only for complete controlled experiments.
 
-Evaluate the checkpoint and create aligned input, target, and prediction WAVs:
+Evaluate one checkpoint:
 
 ```bash
 python scripts/evaluate_experiment.py \
-  --manifest experiments/lstm-nano-seed-42.yaml \
-  --output-dir results/lstm-nano-seed-42 \
-  --chunk-size 65536
+  --manifest docs/examples/evaluation-manifest.yaml \
+  --output-dir results/lstm-small \
+  --device cpu
 ```
 
-Evaluation resets model state once and carries it between chunks. ESR, MSE, and
-correlation cover the complete post-burn segment. MR-STFT is the mean from up to
-ten fixed, uniformly placed, non-overlapping three-second windows; the result
-records every window start and value.
+The command resets model state once and carries it across inference chunks. Use `--chunk-size` to override the manifest value.
 
-Compare evaluation results that use the same aligned dataset segment:
+The result directory contains:
+
+- `evaluation.json`
+- `input.wav`
+- `target.wav`
+- `prediction.wav`
+
+Quality metrics include ESR, MSE, correlation, and multi-resolution STFT distance. ESR, MSE, and correlation cover the complete post-mask segment.
+
+MR-STFT uses up to ten fixed, uniformly placed, non-overlapping three-second windows. The report records each window start and value.
+
+The metric mask uses this precedence:
+
+1. Manifest `burn_in_samples`
+2. Dataset `metric_mask_first`
+3. Checkpoint loss `mask_first`
+
+Set `burn_in_samples` explicitly when several models must use one metric window. Listening files retain the complete aligned segment.
+
+## Compare quality results
+
+Compare results from the same dataset segment:
 
 ```bash
-python scripts/compare_evaluations.py results/*/evaluation.json \
+python scripts/compare_evaluations.py \
+  results/lstm/evaluation.json \
+  results/gru/evaluation.json \
   --output-dir results/comparison \
   --size-tolerance 1.35
 ```
 
-`comparison.json` and `comparison.md` retain each run's metrics, model size,
-sources, listening samples, and available performance measurements. They group
-models by the configured parameter-count tolerance but do not declare a winner.
-Experiment-specific decision rules belong with the experiment protocol.
+The command writes `comparison.json` and `comparison.md`. It preserves metrics, model sizes, sources, listening samples, and linked benchmark measurements.
 
-Only complete, controlled runs should use `run_kind: final`. Smoke runs validate
-the workflow but do not support a final model ranking.
+The size tolerance groups models by measured parameter count. The report does not select a winner or apply a regression policy.
 
-Evaluation uses the same paired normalization and latency-compensation behavior as
-training. By default, quality metrics exclude `burn_in_samples`, then
-`dataset.metric_mask_first`, then `loss.mask_first` in that precedence order, and
-use the configured ESR pre-emphasis setting. Listening files retain the full
-aligned segment. Set `burn_in_samples` in every manifest when models must be
-compared over one identical metric window.
+## Benchmark inference
+
+Run one model per process so peak CPU memory remains comparable:
+
+```bash
+python scripts/benchmark.py \
+  --config configs/models/lstm/lstm_small.yaml \
+  --checkpoint lightning_logs/lstm_small/last.ckpt \
+  --output results/lstm-small-benchmark.json \
+  --device cpu \
+  --threads 2
+```
+
+New checkpoints embed their config, so `--config` is optional for them. A config without a checkpoint benchmarks an initialized model.
+
+The benchmark excludes warm-up runs and synchronizes CUDA around timed regions. It measures whole-buffer and stateful block inference.
+
+The JSON result records the workload, runtime, latency distribution, real-time factor, deadline misses, model-state size, and process peak memory.
+
+Create a Markdown table from several benchmark results:
+
+```bash
+python scripts/compare_benchmarks.py \
+  results/lstm-small-benchmark.json \
+  results/gru-small-benchmark.json \
+  --output results/benchmark-comparison.md
+```
+
+Pass a benchmark result path in each evaluation manifest when the quality comparison must include runtime measurements.
