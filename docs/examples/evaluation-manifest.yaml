@@ -1,0 +1,22 @@
+schema_version: "1.0"
+experiment_id: "lstm-small-seed-42"
+run_kind: "smoke"
+inference_chunk_size: 65536
+burn_in_samples: 4096
+model:
+  config: "../../configs/models/lstm/lstm_small.yaml"
+  checkpoint: "../../lightning_logs/lstm_small/last.ckpt"
+dataset:
+  input_audio: "../../data/test/input.wav"
+  target_audio: "../../data/test/target.wav"
+  split: "test"
+  start_sample: 0
+  num_samples: 144000
+  latency_samples: 0
+  normalization: "paired_peak"
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 1
+  early_stopping: "train_loss"
+notes: "Replace paths and training metadata with the values for this run."

@@ -1,392 +1,87 @@
 # neural-fx
 
-Real-time guitar effect and amp modelling using neural networks (LSTM, GRU, WaveNet, SSM/Mamba/S4).
+neural-fx trains neural networks to model guitar amplifiers and effects from paired audio. The package supports LSTM, GRU, WaveNet, and S4D models.
 
-## Features
+The main workflows run through scripts. The `neural_fx` package provides shared model, training, inference, evaluation, and monitoring code.
 
-- **Model Architectures**: LSTM, GRU, causal WaveNet, and portable S4D
-- **Audio Processing**: 48kHz sample rate, chunked processing for memory efficiency
-- **Training**: PyTorch Lightning with TBPTT (Truncated Backpropagation Through Time) and burn-in support
-- **Live metrics**: CSV and TensorBoard logs written to the same training run directory
-- **Conditioning**: Support for gain knob and other control parameters
-- **Export**: ONNX, TorchScript, and RTNeural JSON formats for deployment
-- **Inference**: Real-time streaming processor for single-sample and block processing
-- **Offline monitoring**: Reproducible quality and performance reports for fixed audio suites
+## Requirements
 
-## Quick Start
+- Python 3.10 through 3.13
+- FFmpeg shared libraries for audio loading
+- A dry input WAV and its time-aligned processed target WAV
+- A CUDA GPU for practical training times, or a CPU for small runs
 
-### Installation
+## Quick start
+
+Clone the repository and install the core package:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Ikkjo/neural-fx.git
 cd neural-fx
-pip install -e .
+python -m pip install -e .
 ```
 
-For development, install the test and lint tools as well:
+Put a paired recording at these paths:
 
-```bash
-pip install -e ".[dev]"
+```text
+data/DI.wav
+data/effect.wav
 ```
 
-Install the optional ONNX toolchain when exporting or validating ONNX models:
+The files must contain the same performance. `DI.wav` is the dry signal. `effect.wav` is the recorded amplifier or effect output.
 
-```bash
-pip install -e ".[onnx]"
-```
-
-### Training a Model
-
-```bash
-# Train an LSTM model
-python scripts/train.py --config configs/models/lstm/lstm_medium.yaml
-
-# Train a GRU model
-python scripts/train.py --config configs/models/gru/gru_medium.yaml
-
-# Train a causal WaveNet
-python scripts/train.py --config configs/models/wavenet/wavenet_small.yaml
-
-# Train the portable diagonal state-space model
-python scripts/train.py --config configs/models/s4/s4_small.yaml
-
-# Train with custom epochs
-python scripts/train.py --config configs/models/lstm/lstm_small.yaml --max_epochs 50
-
-# Follow a run while it trains
-tensorboard --logdir lightning_logs
-```
-
-For short experiments, pass `--log_every_n_steps 1` to update both loggers on
-every training batch. The default interval is 50 steps.
-
-### Compiled Training
-
-Enable PyTorch compilation for a training run with `--compile` or with
-`training.compile: true` in its YAML configuration. `--no-compile` overrides a
-configuration that enables it. Configurations that omit the setting remain
-eager by default.
-
-The shipped WaveNet configurations enable compilation because it reduced
-warmed optimizer-step and epoch time by about 20% on the issue #40 RTX 3050
-workload. The measured recurrent and S4D workloads remain eager by default.
-Compilation has extra first-run cost; later processes can reuse PyTorch's local
-compiler cache. Set `TORCHINDUCTOR_CACHE_DIR` when the cache needs an explicit
-location.
-
-Compiled training supports CPU or one CUDA device and does not support enabled
-TBPTT. Multi-GPU and TBPTT requests fail before training, and compiler failures
-are reported instead of silently retrying in eager mode.
-
-### Exporting a Trained Model
-
-```bash
-# Export every format supported by this model
-python scripts/export.py \
-    --config configs/models/lstm/lstm_medium.yaml \
-    --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
-    --output_dir ./exports
-
-# Export to specific formats only
-python scripts/export.py \
-    --config configs/models/lstm/lstm_medium.yaml \
-    --checkpoint lightning_logs/lstm_medium/epoch=10.ckpt \
-    --formats onnx,torchscript
-```
-
-The shipped LSTM/GRU configs use strided convolution and support ONNX and
-TorchScript export. RTNeural JSON is limited to unconditioned recurrent+dense
-graphs without strided upsampling or residual skip connections; unsupported
-formats are skipped with an explanation.
-
-### Offline Monitoring
-
-Use `scripts/monitor.py` to evaluate a checkpoint or TorchScript export against
-a fixed audio suite. See [the offline monitoring guide](docs/monitoring.md).
-
-## Model Configurations
-
-### LSTM Models
-
-| Model | Hidden Size | Layers | Conv Filters | Stride | Params |
-|-------|-------------|--------|--------------|--------|--------|
-| nano | 20 | 1 | 16 | 4 | ~3K |
-| small | 36 | 2 | 16 | 12 | ~11K |
-| medium | 64 | 2 | 36 | 4 | ~41K |
-| large | 96 | 2 | 36 | 3 | ~81K |
-| xl | 128 | 2 | 36 | 3 | ~137K |
-
-### GRU Models
-
-| Model | Hidden Size | Layers | Conv Filters | Stride | Params |
-|-------|-------------|--------|--------------|--------|--------|
-| nano | 20 | 1 | 16 | 4 | ~2K |
-| small | 36 | 2 | 16 | 12 | ~8K |
-| medium | 64 | 2 | 36 | 4 | ~31K |
-| large | 96 | 2 | 36 | 3 | ~61K |
-| xl | 128 | 2 | 36 | 3 | ~103K |
-
-### WaveNet Models
-
-WaveNet configurations use repeated dilation cycles. Its exact receptive field is
-`1 + (kernel_size - 1) * stacks * (2**layers - 1)` samples. Full-sequence,
-chunked, and cached sample inference are causal. TorchScript and ONNX export are
-supported; the current RTNeural JSON format cannot represent the WaveNet graph.
-
-### S4D Models
-
-The `s4` model type uses a stable diagonal state-space layer implemented with
-core PyTorch. Training uses causal FFT convolution, while block and sample
-inference carry recurrent states. Its memory is theoretically unbounded.
-TorchScript export produces a recurrent cell with explicit state input/output;
-ONNX and RTNeural cannot currently represent the required state-space graph.
-
-## Using NAM-Style Test Signals
-
-The system supports both real audio recordings and NAM-style test tone signals for training:
-
-### NAM Test Tones
-
-[NAM (Neural Amp Modeler)](https://github.com/sdatkinson/neural-amp-modeler) uses specialized test signals with **blips** (impulse spikes) for precise latency calibration. These signals provide:
-- Clean impulse responses for accurate delay measurement
-- Replicability checks that pass cleanly (low ESR)
-- Standardized input files for consistent results
-
-### Training with NAM Inputs
-
-To use NAM-style inputs, set the latency method to `blip` for automatic detection:
+Train the small LSTM for one epoch:
 
 ```bash
 python scripts/train.py \
-    --config configs/models/lstm/lstm_nano_nam.yaml \
-    --latency_method blip
+  --config configs/models/lstm/lstm_small.yaml \
+  --max_epochs 1
 ```
 
-### NAM Configuration Example
-
-```yaml
-# NAM-specific configuration
-latency:
-  method: "blip"  # Use blip detection for NAM inputs
-  manual_delay: null
-  max_delay: 10000
-  calibration_duration_seconds: 5.0
-
-data:
-  train:
-    input: "data/nam_input_v3.wav"  # NAM v3 standard input
-    target: "data/nam_output.wav"
-```
-
-The replicability check will typically show low ESR values (< 0.01) with NAM inputs, indicating the model can accurately replicate the target signal.
-
-## Configuration
-
-Models are configured via YAML files. Example:
-
-```yaml
-version: "1.0"
-name: "lstm_medium"
-
-model:
-  type: "lstm"  # or "gru"
-  input_size: 1
-  output_size: 1
-  sample_rate: 48000
-  params:
-    hidden_size: 64
-    num_layers: 2
-    conv1d:
-      filters: 36
-      kernel_size: 3
-      stride: 4
-    skip_connection: false
-    dropout: 0.0
-    conditioning_size: 0  # Set >0 for gain knob support
-
-training:
-  batch_size: 32
-  epochs: 100
-  segment_length: 8192
-  tbptt:
-    enabled: true
-    burn_in: 4096  # Samples to warm up hidden state
-  seed: 42
-
-optimizer:
-  type: "adam"
-  lr: 0.01
-
-lr_scheduler:
-  type: "exponential"
-  gamma: 0.995
-
-loss:
-  type: "mse"
-  weights:
-    esr: 0.0  # Error-to-signal ratio weight
-    mse: 1.0  # MSE weight
-  pre_emphasis:
-    enabled: true
-    coef: 0.85
-  mask_first: 4096  # Exclude from loss calculation
-
-data:
-  train:
-    input: "data/DI.wav"    # Dry guitar input
-    target: "data/effect.wav"  # Processed target
-```
-
-`model.sample_rate` is the single source of truth for model construction, data
-resampling, latency calibration, inference, analysis, and saved audio.
-Set `latency.calibration_duration_seconds` to `0` to disable latency
-calibration; positive values select how much audio is used.
-
-## Project Structure
-
-```
-neural-fx/
-├── neural_fx/              # Main package
-│   ├── config.py           # Configuration dataclasses
-│   ├── data/               # Data loading & transforms
-│   │   ├── dataset.py      # AudioDataset for training
-│   │   └── transforms.py   # Audio preprocessing
-│   ├── models/             # Model implementations
-│   │   ├── base.py         # Base model interface
-│   │   ├── recurrent.py    # LSTM/GRU implementations
-│   │   ├── wavenet.py      # Causal WaveNet
-│   │   └── ssm.py          # Portable S4D
-│   ├── training/           # Training infrastructure
-│   │   └── lightning_module.py  # LightningModule with TBPTT
-│   ├── losses/             # Loss functions
-│   │   └── audio_losses.py # ESR, MSE with pre-emphasis
-│   └── inference/          # Inference utilities
-│       └── streaming.py    # Real-time processing
-├── configs/models/         # Model configurations
-│   ├── lstm/               # LSTM configs (nano/small/medium/large/xl)
-│   ├── gru/                # GRU configs (nano/small/medium/large/xl)
-│   ├── wavenet/            # WaveNet configs
-│   └── s4/                 # S4D configs
-├── scripts/                # Entry-point scripts
-│   ├── train.py            # Training script
-│   └── export.py           # Model export script
-└── tests/                  # Test suite
-│   └── test_recurrent.py   # LSTM/GRU tests
-```
-
-## Testing
-
-This project uses `pytest` for testing.
+The command uses one CUDA device when PyTorch can access it. Add `--cpu` to force CPU training:
 
 ```bash
-# Run all tests
-pytest tests/
-
-# Run optional ONNX export tests
-pytest --run-onnx tests/test_export.py tests/test_wavenet.py
-
-# Run specific test file
-pytest tests/test_recurrent.py -v
-
-# Run with coverage
-pytest --cov=neural_fx
+python scripts/train.py \
+  --config configs/models/lstm/lstm_small.yaml \
+  --max_epochs 1 \
+  --cpu
 ```
 
-## Linting
+Training writes the terminal checkpoint to `lightning_logs/lstm_small/last.ckpt`. Process a WAV file with that checkpoint:
 
-This project uses [ruff](https://docs.astral.sh/ruff/) for linting and code style enforcement.
+```python
+from neural_fx.artifacts import load_model
+from neural_fx.inference import process_audio
+
+loaded = load_model(checkpoint_path="lightning_logs/lstm_small/last.ckpt")
+process_audio(loaded.model, "data/DI.wav", "outputs/lstm_small.wav")
+```
+
+One epoch checks the workflow. It does not produce a useful amplifier or effect model. Train on separate training and validation recordings for real experiments.
+
+## Models
+
+| Model | Config name | Training | Streaming inference | Export summary |
+| --- | --- | --- | --- | --- |
+| LSTM | `lstm` | Eager by default | Sample and block | ONNX, TorchScript, and restricted RTNeural |
+| GRU | `gru` | Eager by default | Sample and block | ONNX, TorchScript, and restricted RTNeural |
+| WaveNet | `wavenet` | Compiled in shipped configs | Sample and block | ONNX and TorchScript |
+| S4D | `s4` | Eager by default | Sample and block | TorchScript |
+
+The shipped WaveNet configs enable `torch.compile`. This default improved warmed training time by about 20% on the measured RTX 3050 workload. Results can differ on other hardware.
+
+## Documentation
+
+- [Setup](docs/setup.md): development tools, ONNX dependencies, CUDA, and environment checks
+- [Training](docs/training.md): audio requirements, configs, checkpoints, resume, logs, and training options
+- [Inference and export](docs/inference-and-export.md): file and streaming inference, artifact loading, and export support
+- [Evaluation](docs/evaluation.md): controlled quality evaluation and inference benchmarks
+- [Offline monitoring](docs/monitoring.md): repeatable checks for checkpoints and TorchScript artifacts
+- [S4D architecture decision](docs/decisions/ssm-architecture.md): the accepted state-space model design
+
+## Development checks
 
 ```bash
-# Run ruff linter
-ruff check .
-
-# Run ruff formatter
-ruff format .
-
-# Fix auto-fixable issues
-ruff check --fix .
+python -m pytest tests
+ruff check neural_fx scripts tests setup.py
 ```
-
-## Usage Examples
-
-### Loading and Using a Model
-
-```python
-from neural_fx.config import load_config
-from neural_fx.models.recurrent import RecurrentNeuralFXModel
-
-# Load config and create model
-config = load_config('configs/models/lstm/lstm_medium.yaml')
-model = RecurrentNeuralFXModel.from_config(config.model)
-
-# Process audio
-import torch
-audio = torch.randn(1, 1, 48000)  # [batch, channels, samples]
-output = model(audio)
-```
-
-### Real-time Inference
-
-```python
-from neural_fx.inference import StreamingProcessor
-
-# Create streaming processor
-processor = StreamingProcessor(model)  # Uses model.sample_rate
-
-# Process single sample (for real-time audio callbacks)
-output_sample = processor.process_sample(input_sample)
-
-# Or process a block of samples
-output_block = processor.process_block(input_block)
-```
-
-### Evaluation
-
-```python
-from neural_fx.inference import evaluate_model
-
-metrics = evaluate_model(
-    model,
-    input_path='data/test_DI.wav',
-    target_path='data/test_effect.wav',
-    burn_in=4096  # Exclude burn-in from metrics
-)
-print(f"MSE: {metrics['mse']:.6f}, ESR: {metrics['esr']:.6f}")
-```
-
-## Training Details
-
-### TBPTT (Truncated Backpropagation Through Time)
-
-The training uses a sliding window approach for TBPTT:
-- Each training segment is processed in chunks
-- Hidden state is detached between chunks to truncate gradient flow
-- Burn-in samples warm up the hidden state but are excluded from loss
-
-### Burn-in
-
-The first `burn_in` samples of each training segment:
-- Are processed through the model to warm up hidden state
-- Are excluded from loss calculation entirely
-- Help the model reach a stable state before learning
-
-## Model Export Formats
-
-### ONNX
-- Compatible with ONNX Runtime
-- Dynamic batch and time dimensions
-- Suitable for cross-platform deployment
-
-### TorchScript
-- Stateless wrapper for traceability
-- Can be loaded in C++ with libtorch
-- Optimized for inference
-
-### RTNeural JSON
-- Compatible with [RTNeural](https://github.com/jatinchowdhury18/RTNeural) C++ library
-- Lightweight format for real-time audio plugins
-- Supports LSTM, GRU, Conv1D, and Dense layers
-
-## License
-
-[Add your license here]
