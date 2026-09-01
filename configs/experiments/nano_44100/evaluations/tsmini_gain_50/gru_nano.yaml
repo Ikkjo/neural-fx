@@ -1,0 +1,28 @@
+schema_version: '1.0'
+experiment_id: nano_44100_tsmini_gain_50_gru_nano_seed42
+run_kind: final
+inference_chunk_size: 65536
+esr_mode: nam
+burn_in_samples: 4096
+esr_pre_emphasis: null
+model:
+  type: gru
+  config: ../../runs/tsmini_gain_50/gru_nano.yaml
+  checkpoint: ../../../../../local/nano_44100/checkpoints/nano_44100_tsmini_gain_50_gru_nano_seed42/best.ckpt
+  checkpoint_policy: best
+  benchmark_result: ../../../../../local/nano_44100/results/benchmarks/final/nano_44100_tsmini_gain_50_gru_nano_seed42.json
+dataset:
+  input_audio: ../../../../../local/nano_44100/data/tsmini_gain_50/data/test/input.wav
+  target_audio: ../../../../../local/nano_44100/data/tsmini_gain_50/data/test/target.wav
+  split: test
+  start_sample: 0
+  num_samples: 3907584
+  latency_samples: 0
+  normalization: paired_peak
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 400
+  deterministic: true
+  selection_metric: val_loss
+  early_stopping: false

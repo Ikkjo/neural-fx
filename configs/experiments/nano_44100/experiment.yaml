@@ -1,0 +1,113 @@
+schema_version: "1.0"
+experiment_id: "nano-44100-seed42"
+run_id_prefix: "nano_44100"
+
+paths:
+  source_root: "data"
+  prepared_root: "local/nano_44100/data"
+  checkpoint_root: "local/nano_44100/checkpoints"
+  smoke_checkpoint_root: "local/nano_44100/smoke-checkpoints"
+  results_root: "local/nano_44100/results"
+  state_root: "local/nano_44100/state"
+
+audio:
+  sample_rate: 44100
+  source_samples: 39051249
+  input_file: "DI.wav"
+  input_sha256: "aea90e94cf756e61ac6243998db858437caa41853bb835d1c523f9835a22ac7f"
+  splits:
+    - name: "train"
+      start_sample: 0
+      num_samples: 31162368
+      write_audio: true
+    - name: "guard_train_val"
+      start_sample: 31162368
+      num_samples: 44100
+      write_audio: false
+    - name: "val"
+      start_sample: 31206468
+      num_samples: 3891200
+      write_audio: true
+    - name: "guard_val_test"
+      start_sample: 35097668
+      num_samples: 44100
+      write_audio: false
+    - name: "test"
+      start_sample: 35141768
+      num_samples: 3907584
+      write_audio: true
+
+targets:
+  - id: "ds1_gain_50"
+    file: "ds1_gain_50.wav"
+    sha256: "c36a11483190d537b31245dd3eb41cc3b6b76f15d78447727f1f98d377d64a2d"
+    delay_samples: 65
+  - id: "ds1_gain_75"
+    file: "ds1_gain_75.wav"
+    sha256: "05b9fbd0735c55b8d5a84bb23b8e73742e69253ca3ef9d2f28cc97731c7b7918"
+    delay_samples: 61
+  - id: "ds1_gain_100"
+    file: "ds1_gain_100.wav"
+    sha256: "7e9f6d5b7ec52176b133aaaab67e1e40cb4997ad3429bb3315fe22a28b15d3d2"
+    delay_samples: 62
+  - id: "tsmini_gain_50"
+    file: "tsmini_gain_50.wav"
+    sha256: "601446700d5dd43d0120096d7728b871c497075a0238126fc9c3527138748f3d"
+    delay_samples: -40
+  - id: "tsmini_gain_75"
+    file: "tsmini_gain_75.wav"
+    sha256: "b9b2f5eb8250d04f5c220ffae756a740772ab3eb71b7e7c6428e2ca75e7254e4"
+    delay_samples: -41
+  - id: "tsmini_gain_100"
+    file: "tsmini_gain_100.wav"
+    sha256: "f3b75ff60a6ac1e81e4a4258d9bf1a2b734d7c90fffe795bbfb1426b87e7e041"
+    delay_samples: -42
+  - id: "pearl_clean_sm57"
+    file: "pearl_clean_sm57.wav"
+    sha256: "20227efaa4edb4a7f0f060e7386c5816c7ed3dfcd767943952c8663334014bf8"
+    delay_samples: 221
+  - id: "full_rig"
+    file: "full_rig.wav"
+    sha256: "30c67e596387e0231315393e97c188350452ad2113e302978636eb82a0ff5756"
+    delay_samples: 233
+
+models:
+  - id: "lstm_nano"
+    type: "lstm"
+    base_config: "configs/models/lstm/lstm_nano.yaml"
+    expected_parameters: 3129
+  - id: "gru_nano"
+    type: "gru"
+    base_config: "configs/models/gru/gru_nano.yaml"
+    expected_parameters: 2369
+  - id: "wavenet_nano"
+    type: "wavenet"
+    base_config: "configs/models/wavenet/wavenet_nano.yaml"
+    expected_parameters: 6161
+
+training:
+  epochs: 400
+  num_workers: 0
+  seed: 42
+  deterministic: true
+  normalize: true
+  early_stopping:
+    enabled: false
+
+evaluation:
+  burn_in_samples: 4096
+  inference_chunk_size: 65536
+  esr_mode: "nam"
+  esr_pre_emphasis: null
+
+benchmark:
+  device: "cpu"
+  threads: 1
+  block_sizes: [64, 128, 256, 512]
+  num_samples: 44100
+  warmup_runs: 3
+  measurement_runs: 20
+
+smoke:
+  target: "full_rig"
+  epochs: 1

@@ -1,0 +1,58 @@
+version: '1.0'
+name: nano_44100_ds1_gain_75_lstm_nano_seed42
+model:
+  type: lstm
+  input_size: 1
+  output_size: 1
+  sample_rate: 44100
+  params:
+    hidden_size: 20
+    num_layers: 1
+    conv1d:
+      filters: 16
+      kernel_size: 3
+      stride: 4
+    skip_connection: false
+    dropout: 0.0
+training:
+  batch_size: 32
+  epochs: 400
+  segment_length: 8192
+  tbptt:
+    enabled: true
+    burn_in: 4096
+  seed: 42
+  deterministic: true
+  early_stopping: false
+optimizer:
+  type: adam
+  lr: 0.01
+lr_scheduler:
+  type: exponential
+  gamma: 0.995
+loss:
+  type: mse
+  weights:
+    esr: 0.0
+    mse: 1.0
+  pre_emphasis:
+    enabled: true
+    coef: 0.85
+  mask_first: 4096
+data:
+  normalize: true
+  train:
+    input: local/nano_44100/data/ds1_gain_75/data/train/input.wav
+    target: local/nano_44100/data/ds1_gain_75/data/train/target.wav
+  val:
+    input: local/nano_44100/data/ds1_gain_75/data/val/input.wav
+    target: local/nano_44100/data/ds1_gain_75/data/val/target.wav
+latency:
+  method: manual
+  manual_delay: 0
+  calibration_duration_seconds: 0
+validation:
+  enabled: true
+  check_clipping: true
+  check_dc_offset: true
+  ignore_warnings: false
