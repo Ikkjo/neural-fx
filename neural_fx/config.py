@@ -113,8 +113,21 @@ class TrainingConfig:
     deterministic: bool = False
     compile: bool = False
     early_stopping: bool = True
+    early_stopping_patience: int = 10
+    early_stopping_min_delta: float = 0.0
+    early_stopping_min_delta_mode: Literal["absolute", "relative"] = "absolute"
     augmentation: AugmentationConfig | None = None
     num_workers: int = 4
+
+    def __post_init__(self) -> None:
+        if self.early_stopping_patience < 0:
+            raise ValueError("early_stopping_patience cannot be negative")
+        if self.early_stopping_min_delta < 0:
+            raise ValueError("early_stopping_min_delta cannot be negative")
+        if self.early_stopping_min_delta_mode not in {"absolute", "relative"}:
+            raise ValueError(
+                "early_stopping_min_delta_mode must be 'absolute' or 'relative'"
+            )
 
 
 @dataclass
@@ -358,6 +371,15 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             deterministic=training_cfg.get("deterministic", False),
             compile=training_cfg.get("compile", False),
             early_stopping=training_cfg.get("early_stopping", True),
+            early_stopping_patience=training_cfg.get(
+                "early_stopping_patience", 10
+            ),
+            early_stopping_min_delta=training_cfg.get(
+                "early_stopping_min_delta", 0.0
+            ),
+            early_stopping_min_delta_mode=training_cfg.get(
+                "early_stopping_min_delta_mode", "absolute"
+            ),
             augmentation=augmentation,
             num_workers=training_cfg.get("num_workers", 4),
         ),

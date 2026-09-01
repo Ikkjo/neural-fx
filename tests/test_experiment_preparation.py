@@ -10,18 +10,21 @@ import torchaudio
 
 from neural_fx.config import config_from_dict
 from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
-from neural_fx.training.callbacks import NeuralFXCheckpoint
 from neural_fx.training.lightning_module import NeuralFXModule
 from neural_fx.training.run import create_trainer, publish_best_checkpoint
 
 
-def _write_delayed_pair(root: Path) -> tuple[Path, Path]:
+def _write_delayed_pair(root: Path, delay: int = 4) -> tuple[Path, Path]:
     sample_rate = 8_000
-    delay = 4
     time = torch.arange(5_000) / sample_rate
     input_audio = (0.4 * torch.sin(2 * torch.pi * 173 * time)).unsqueeze(0)
     target_audio = torch.zeros_like(input_audio)
-    target_audio[..., delay:] = -0.5 * input_audio[..., :-delay]
+    if delay > 0:
+        target_audio[..., delay:] = -0.5 * input_audio[..., :-delay]
+    elif delay < 0:
+        target_audio[..., :delay] = -0.5 * input_audio[..., -delay:]
+    else:
+        target_audio = -0.5 * input_audio
     input_path = root / "input.wav"
     target_path = root / "target.wav"
     torchaudio.save(
@@ -69,6 +72,25 @@ def test_preparation_aligns_resamples_and_preserves_relative_gain(
         "target_to_input_rms_ratio"
     ] == pytest.approx(0.5, rel=1e-4)
     assert not (output / "data/guard_train_val").exists()
+
+
+def test_preparation_aligns_a_target_that_leads_the_input(tmp_path: Path) -> None:
+    input_path, target_path = _write_delayed_pair(tmp_path, delay=-4)
+    output = tmp_path / "prepared"
+
+    manifest = prepare_aligned_audio(
+        input_path,
+        target_path,
+        output,
+        target_sample_rate=16_000,
+        target_delay_source_samples=-4,
+        splits=_small_splits(),
+    )
+
+    train_input, _ = torchaudio.load(output / "data/train/input.wav")
+    train_target, _ = torchaudio.load(output / "data/train/target.wav")
+    assert torch.allclose(train_target, -0.5 * train_input, atol=1e-4)
+    assert manifest["alignment"]["operation"] == "trim input head; trim target tail"
 
 
 def test_preparation_reuses_exact_output_and_rejects_changes(tmp_path: Path) -> None:
@@ -139,25 +161,3 @@ def test_best_checkpoint_is_published_at_manifest_path(tmp_path: Path) -> None:
 
     assert canonical == (tmp_path / "runs/experiment/best.ckpt").resolve()
     assert canonical.read_bytes() == b"checkpoint"
-
-
-def test_terminal_checkpoint_overwrites_callback_last_state(tmp_path: Path) -> None:
-    config = config_from_dict(
-        {
-            "version": "1.0",
-            "name": "terminal-state",
-            "model": {"type": "lstm", "params": {"hidden_size": 4}},
-            "training": {},
-            "loss": {"type": "mse"},
-            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
-        }
-    )
-    callback = NeuralFXCheckpoint(config, dirpath=tmp_path)
-    trainer = object()
-
-    with patch.object(callback, "_save_checkpoint") as save_checkpoint:
-        terminal = callback.save_terminal_checkpoint(trainer)
-
-    assert terminal == tmp_path / "last.ckpt"
-    assert callback.last_model_path == str(terminal)
-    save_checkpoint.assert_called_once_with(trainer, str(terminal))

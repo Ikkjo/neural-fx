@@ -197,6 +197,7 @@ class ValidationEarlyStopping(EarlyStopping):
         self,
         monitor: str = "val_loss",
         min_delta: float = 0.0,
+        min_delta_mode: str = "absolute",
         patience: int = 10,
         mode: str = "min",
         strict: bool = True,
@@ -207,16 +208,33 @@ class ValidationEarlyStopping(EarlyStopping):
         Args:
             monitor: Metric to monitor for early stopping.
             min_delta: Minimum change to qualify as an improvement.
+            min_delta_mode: Interpret min_delta as an absolute value or a
+                fraction of the best score.
             patience: Number of epochs with no improvement after which training stops.
             mode: "min" or "max" for the monitored metric.
             strict: Whether to crash if the metric is not found.
             **kwargs: Additional arguments passed to EarlyStopping.
         """
+        if min_delta_mode not in {"absolute", "relative"}:
+            raise ValueError("min_delta_mode must be 'absolute' or 'relative'")
+        if min_delta < 0:
+            raise ValueError("min_delta cannot be negative")
+        self.min_delta_mode = min_delta_mode
+        self.relative_min_delta = min_delta if min_delta_mode == "relative" else 0.0
         super().__init__(
             monitor=monitor,
-            min_delta=min_delta,
+            min_delta=0.0 if min_delta_mode == "relative" else min_delta,
             patience=patience,
             mode=mode,
             strict=strict,
             **kwargs,
         )
+
+    def _evaluate_stopping_criteria(
+        self, current: torch.Tensor
+    ) -> tuple[bool, str | None]:
+        """Apply a scale-independent threshold when relative mode is enabled."""
+        if self.min_delta_mode == "relative" and torch.isfinite(self.best_score):
+            absolute_delta = abs(float(self.best_score)) * self.relative_min_delta
+            self.min_delta = absolute_delta if self.mode == "max" else -absolute_delta
+        return super()._evaluate_stopping_criteria(current)
