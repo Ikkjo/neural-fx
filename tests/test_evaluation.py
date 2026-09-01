@@ -61,7 +61,13 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
                 "schema_version": "1.0",
                 "experiment_id": "test-gru",
                 "run_kind": "smoke",
-                "model": {"config": "config.yaml", "checkpoint": "model.pt"},
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+                "model": {
+                    "config": "config.yaml",
+                    "checkpoint": "model.pt",
+                    "checkpoint_policy": "last",
+                },
                 "dataset": {
                     "input_audio": "input.wav",
                     "target_audio": "target.wav",
@@ -107,6 +113,8 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
     assert result["dataset"]["evaluated_samples"] == 4096
     assert result["dataset"]["mask_first"] == 128
     assert result["dataset"]["configured_loss_mask_first"] == 64
+    assert result["dataset"]["esr_mode"] == "nam"
+    assert result["model"]["checkpoint_policy"] == "last"
     assert result["dataset"]["metric_samples"] == 3968
     assert result["dataset"]["stft_window_starts"] == [0]
     assert result["inference"] == {
@@ -170,6 +178,17 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
     )
 
     assert report["interpretation"] == "workflow_validation_only"
+    assert report["primary_metric"] == {
+        "name": "esr",
+        "direction": "lower_is_better",
+        "secondary_metrics": [
+            "mse",
+            "correlation",
+            "multi_resolution_stft_distance",
+        ],
+    }
+    assert [row["esr_rank"] for row in report["results"]] == [1, 2]
+    assert "ESR is the primary ranking metric" in markdown
     assert report["size_groups"][0]["experiments"] == ["lstm", "gru"]
     assert "must not be used as a final quality ranking" in markdown
     assert "[checkpoint](/model.ckpt)" in markdown
@@ -209,3 +228,18 @@ def test_chunked_inference_matches_whole_inference(config: ModelConfig) -> None:
     chunked = run_chunked_inference(model, audio, chunk_size=31)
 
     torch.testing.assert_close(chunked, whole, atol=2e-5, rtol=1e-4)
+
+
+def test_chunked_inference_does_not_build_an_autograd_graph() -> None:
+    model = create_model_from_config(
+        ModelConfig(type="lstm", params=LSTMParams(hidden_size=4, num_layers=1))
+    ).eval()
+
+    output = run_chunked_inference(
+        model,
+        torch.randn(1, 1, 129, requires_grad=True),
+        chunk_size=31,
+    )
+
+    assert output.requires_grad is False
+    assert output.grad_fn is None

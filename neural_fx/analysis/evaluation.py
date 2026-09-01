@@ -199,10 +199,10 @@ def _calculate_evaluation_metrics(
             "Evaluation segment after loss masking must contain 2048 samples"
         )
 
-    pre_emphasis = config.loss.pre_emphasis
-    pre_emphasis_coeff = (
-        pre_emphasis.coef if pre_emphasis is not None and pre_emphasis.enabled else None
-    )
+    pre_emphasis_coeff = manifest.get("esr_pre_emphasis")
+    if pre_emphasis_coeff is not None:
+        pre_emphasis_coeff = float(pre_emphasis_coeff)
+    esr_mode = manifest.get("esr_mode", "legacy")
     stft_starts, stft_window_samples = _stft_window_starts(
         prediction.shape[-1],
         config.sample_rate,
@@ -220,6 +220,7 @@ def _calculate_evaluation_metrics(
             prediction,
             target,
             pre_emphasis_coeff=pre_emphasis_coeff,
+            mode=esr_mode,
         ).item(),
         "mse": torch.mean((prediction - target) ** 2).item(),
         "correlation": _safe_correlation(prediction, target),
@@ -227,6 +228,8 @@ def _calculate_evaluation_metrics(
     }
     recipe = {
         "mask_first": mask_first,
+        "esr_mode": esr_mode,
+        "esr_pre_emphasis": pre_emphasis_coeff,
         "configured_loss_mask_first": config.loss.mask_first,
         "metric_samples": prediction.shape[-1],
         "stft_window_starts": stft_starts,
@@ -330,6 +333,11 @@ def evaluate_experiment(
             "name": config.name,
             "type": config.model.type,
             "trainable_parameters": trainable_parameters,
+            **(
+                {"checkpoint_policy": model_spec["checkpoint_policy"]}
+                if "checkpoint_policy" in model_spec
+                else {}
+            ),
         },
         "training": manifest["training"],
         "inference": {
@@ -459,6 +467,9 @@ def build_comparison_report(
                 "listening_samples": result.get("artifacts", {}),
             }
         )
+    rows.sort(key=lambda row: row["metrics"]["esr"])
+    for rank, row in enumerate(rows, start=1):
+        row["esr_rank"] = rank
     report = {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -468,14 +479,23 @@ def build_comparison_report(
             else "final_experiment"
         ),
         "size_tolerance_ratio": size_tolerance,
+        "primary_metric": {
+            "name": "esr",
+            "direction": "lower_is_better",
+            "secondary_metrics": [
+                "mse",
+                "correlation",
+                "multi_resolution_stft_distance",
+            ],
+        },
         "size_groups": groups,
         "results": rows,
     }
 
     header = (
-        "| Experiment | Size group | Kind | Type | Parameters | ESR | MSE | "
+        "| ESR rank | Experiment | Size group | Kind | Type | Parameters | ESR | MSE | "
         "MR-STFT | Correlation | Offline RTF | 128 p95 ms | Inputs | Samples |\n"
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
+        "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
     )
     lines = [header]
     for row in rows:
@@ -498,9 +518,10 @@ def build_comparison_report(
         )
         metrics = row["metrics"]
         lines.append(
-            "| {experiment_id} | {size_group} | {run_kind} | {model_type} | "
+            "| {esr_rank} | {experiment_id} | {size_group} | {run_kind} | {model_type} | "
             "{parameters:,} | {esr:.6f} | {mse:.6f} | {stft:.6f} | "
             "{correlation:.4f} | {rtf} | {p95} | {sources} | {samples} |".format(
+                esr_rank=row["esr_rank"],
                 experiment_id=row["experiment_id"],
                 size_group=row["size_group"],
                 run_kind=row["run_kind"],
@@ -524,7 +545,9 @@ def build_comparison_report(
                 samples=sample_links,
             )
         )
-    prefix = "# Model comparison\n\n" + (
+    prefix = "# Model comparison\n\n"
+    prefix += "> ESR is the primary ranking metric. Lower ESR is better. MSE, correlation, and MR-STFT are secondary metrics.\n\n"
+    prefix += (
         "> These results include smoke runs. They validate the workflow and must not be used as a final quality ranking.\n\n"
         if report["interpretation"] == "workflow_validation_only"
         else "> Final experiment results. Interpret them with the recorded dataset, seeds, and hardware.\n\n"

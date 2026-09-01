@@ -171,9 +171,14 @@ class LossWeights:
 class LossConfig:
     type: str = "mse"
     weights: LossWeights | None = None
+    esr_mode: Literal["legacy", "nam"] = "legacy"
     pre_emphasis: PreEmphasisConfig | None = None
     mask_first: int = 0
     stft: STFTLossConfig | None = None
+
+    def __post_init__(self) -> None:
+        if self.esr_mode not in {"legacy", "nam"}:
+            raise ValueError("esr_mode must be 'legacy' or 'nam'")
 
 
 @dataclass
@@ -390,6 +395,7 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             weights=LossWeights(**loss_cfg["weights"])
             if loss_cfg.get("weights") is not None
             else None,
+            esr_mode=loss_cfg.get("esr_mode", "legacy"),
             pre_emphasis=PreEmphasisConfig(**loss_cfg["pre_emphasis"])
             if loss_cfg.get("pre_emphasis") is not None
             else None,

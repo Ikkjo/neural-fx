@@ -103,6 +103,7 @@ class NeuralFXModule(L.LightningModule):
                         pred,
                         target,
                         pre_emphasis_coeff=pre_emphasis_coeff,
+                        mode=loss_config.esr_mode,
                     )
                 )
             if mse_weight > 0:
@@ -150,8 +151,8 @@ class NeuralFXModule(L.LightningModule):
         segment_length = x.shape[-1]
         truncate = segment_length // 2
 
-        total_loss = torch.tensor(0.0, device=x.device)
-        total_samples = 0
+        predictions: list[Tensor] = []
+        targets: list[Tensor] = []
 
         for start in range(0, segment_length, truncate):
             end = min(start + truncate, segment_length)
@@ -169,17 +170,15 @@ class NeuralFXModule(L.LightningModule):
             if pred_seg.shape[-1] > effective_start:
                 pred_loss = pred_seg[..., effective_start:]
                 y_loss = y_seg[..., effective_start:]
-                loss = self.loss_fn(pred_loss, y_loss)
+                predictions.append(pred_loss)
+                targets.append(y_loss)
 
-                # Weight by number of effective samples in this segment
-                num_samples = pred_loss.numel()
-                total_loss = total_loss + loss * num_samples
-                total_samples += num_samples
-
-        if total_samples > 0:
-            avg_loss = total_loss / total_samples
-            self.log("train_loss", avg_loss, prog_bar=True)
-            return avg_loss
+        if predictions:
+            loss = self.loss_fn(
+                torch.cat(predictions, dim=-1), torch.cat(targets, dim=-1)
+            )
+            self.log("train_loss", loss, prog_bar=True)
+            return loss
         return torch.tensor(0.0, device=x.device)
 
     def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:

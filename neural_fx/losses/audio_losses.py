@@ -4,7 +4,12 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-def pre_emphasis_filter(x: Tensor, coeff: float = 0.95) -> Tensor:
+def pre_emphasis_filter(
+    x: Tensor,
+    coeff: float = 0.95,
+    *,
+    mode: str = "legacy",
+) -> Tensor:
     """
     Apply pre-emphasis filter: y[n] = x[n] - coeff * x[n-1]
 
@@ -13,9 +18,12 @@ def pre_emphasis_filter(x: Tensor, coeff: float = 0.95) -> Tensor:
         coeff: Pre-emphasis coefficient (default 0.95)
 
     Returns:
-        Filtered tensor of same shape as input
+        Filtered tensor. NAM mode drops the first sample.
     """
-    # Keep first sample unchanged, apply filter to rest
+    if mode == "nam":
+        return x[..., 1:] - coeff * x[..., :-1]
+    if mode != "legacy":
+        raise ValueError(f"Unknown ESR mode: {mode}")
     return torch.cat([x[..., :1], x[..., 1:] - coeff * x[..., :-1]], dim=-1)
 
 
@@ -23,16 +31,39 @@ def ESR(
     y_pred: Tensor,
     y_true: Tensor,
     pre_emphasis_coeff: float | None = 0.95,
+    *,
+    mode: str = "legacy",
 ) -> Tensor:
     """
-    Error to signal ratio with pre-emphasis filter.
+    Error to signal ratio with optional pre-emphasis.
+
+    ``legacy`` computes one ratio over the whole tensor. ``nam`` computes a
+    ratio per mono batch item, then averages those ratios.
     """
+    if mode not in {"legacy", "nam"}:
+        raise ValueError(f"Unknown ESR mode: {mode}")
     if pre_emphasis_coeff is None:
         y_true_filtered = y_true
         y_pred_filtered = y_pred
     else:
-        y_true_filtered = pre_emphasis_filter(y_true, pre_emphasis_coeff)
-        y_pred_filtered = pre_emphasis_filter(y_pred, pre_emphasis_coeff)
+        y_true_filtered = pre_emphasis_filter(y_true, pre_emphasis_coeff, mode=mode)
+        y_pred_filtered = pre_emphasis_filter(y_pred, pre_emphasis_coeff, mode=mode)
+    if mode == "nam":
+        if y_pred_filtered.ndim == 3 and y_pred_filtered.shape[1] == 1:
+            y_pred_filtered = y_pred_filtered.squeeze(1)
+            y_true_filtered = y_true_filtered.squeeze(1)
+        if y_pred_filtered.ndim == 1 and y_true_filtered.ndim == 1:
+            y_pred_filtered = y_pred_filtered.unsqueeze(0)
+            y_true_filtered = y_true_filtered.unsqueeze(0)
+        if y_pred_filtered.ndim != 2 or y_true_filtered.ndim != 2:
+            raise ValueError(
+                "NAM ESR expects mono tensors shaped (time,), (batch, time), "
+                "or (batch, 1, time)"
+            )
+        return torch.mean(
+            torch.mean(torch.square(y_pred_filtered - y_true_filtered), dim=1)
+            / torch.mean(torch.square(y_true_filtered), dim=1)
+        )
     return torch.sum(torch.pow(y_true_filtered - y_pred_filtered, 2)) / (
         torch.sum(torch.pow(y_true_filtered, 2)) + 1e-10
     )

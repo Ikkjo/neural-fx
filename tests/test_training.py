@@ -32,7 +32,12 @@ from neural_fx.data.transforms import (
     RandomGain,
     build_augmentation_transform,
 )
-from neural_fx.losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
+from neural_fx.losses.audio_losses import (
+    ESR,
+    MSE,
+    MultiResolutionSTFTLoss,
+    pre_emphasis_filter,
+)
 from neural_fx.models import create_model_from_config
 from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.preprocessing.latency import LatencyCalibration
@@ -64,6 +69,45 @@ class TestModelCreation:
         object.__setattr__(config, "type", "unknown")
         with pytest.raises(ValueError):
             create_model_from_config(config)
+
+
+def test_nam_esr_averages_per_item_and_matches_its_gradient() -> None:
+    target = torch.tensor([[1.0, 1.0], [10.0, 10.0]])
+    prediction = (target + 1.0).requires_grad_()
+
+    actual = ESR(prediction, target, pre_emphasis_coeff=None, mode="nam")
+    expected = torch.mean(
+        torch.mean((prediction - target).square(), dim=1)
+        / torch.mean(target.square(), dim=1)
+    )
+    actual_gradient = torch.autograd.grad(actual, prediction)[0]
+    expected_gradient = torch.autograd.grad(expected, prediction)[0]
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    torch.testing.assert_close(actual_gradient, expected_gradient, rtol=0, atol=0)
+    assert actual != ESR(prediction.detach(), target, pre_emphasis_coeff=None)
+
+
+def test_nam_esr_keeps_nam_pre_emphasis_and_zero_energy_behavior() -> None:
+    signal = torch.tensor([[[1.0, 3.0, 7.0]]])
+
+    filtered = pre_emphasis_filter(signal, 0.5, mode="nam")
+
+    torch.testing.assert_close(filtered, torch.tensor([[[2.5, 5.5]]]))
+    assert filtered.shape[-1] == signal.shape[-1] - 1
+    assert torch.isinf(
+        ESR(torch.ones(1, 2), torch.zeros(1, 2), pre_emphasis_coeff=None, mode="nam")
+    )
+    assert torch.isnan(
+        ESR(torch.zeros(1, 2), torch.zeros(1, 2), pre_emphasis_coeff=None, mode="nam")
+    )
+    with pytest.raises(ValueError, match="mono"):
+        ESR(
+            torch.ones(1, 2, 2),
+            torch.ones(1, 2, 2),
+            pre_emphasis_coeff=None,
+            mode="nam",
+        )
 
 
 class TestAugmentations:
@@ -527,6 +571,35 @@ class TestUpdatedLossWeights:
             module.loss_fn(pred, target),
             ESR(pred, target, pre_emphasis_coeff=0.2),
         )
+
+    def test_tbptt_scores_nam_esr_over_the_full_segment(self, base_config):
+        class StatefulIdentity(torch.nn.Module):
+            def forward(self, x):
+                return x
+
+            def reset_state(self):
+                pass
+
+            def detach_state(self):
+                pass
+
+        base_config.training.tbptt = TBPTTConfig(enabled=True)
+        base_config.loss.weights = LossWeights(esr=1.0, mse=0.0, stft=0.0)
+        base_config.loss.esr_mode = "nam"
+        base_config.loss.pre_emphasis = PreEmphasisConfig(enabled=False)
+        module = NeuralFXModule(StatefulIdentity(), base_config)
+        prediction = torch.tensor([[2.0, 2.0, 11.0, 11.0]])
+        target = torch.tensor([[1.0, 1.0, 10.0, 10.0]])
+
+        actual = module.training_step((prediction, target), batch_idx=0)
+        expected = ESR(
+            prediction.unsqueeze(1),
+            target.unsqueeze(1),
+            pre_emphasis_coeff=None,
+            mode="nam",
+        )
+
+        torch.testing.assert_close(actual, expected)
 
     def test_loss_mask_controls_burn_in(self, base_config):
         """Loss masking is owned by loss.mask_first, not TBPTT warm-up config."""
