@@ -358,7 +358,11 @@ def run_training(run: TrainingRun) -> TrainingResult:
     else:
         trainer.fit(module)
 
-    terminal_checkpoint = checkpoint.save_terminal_checkpoint(trainer)
+    terminal_checkpoint = Path(checkpoint.last_model_path)
+    if not terminal_checkpoint.is_file():
+        raise FileNotFoundError(
+            f"Lightning did not save the terminal checkpoint: {terminal_checkpoint}"
+        )
     best_checkpoint = publish_best_checkpoint(
         checkpoint.best_model_path,
         run.checkpoint_dir,

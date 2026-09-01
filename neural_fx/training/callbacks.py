@@ -72,13 +72,6 @@ class NeuralFXCheckpoint(ModelCheckpoint):
         # Save metadata as .meta.json
         self._save_metadata(trainer, filepath)
 
-    def save_terminal_checkpoint(self, trainer: L.Trainer) -> Path:
-        """Persist the actual terminal trainer state for reliable resumption."""
-        checkpoint_path = Path(self.dirpath) / "last.ckpt"
-        self._save_checkpoint(trainer, str(checkpoint_path))
-        self.last_model_path = str(checkpoint_path)
-        return checkpoint_path
-
     def _save_metadata(self, trainer: L.Trainer, ckpt_path: str | Path) -> None:
         """Save metadata alongside the checkpoint.
 
