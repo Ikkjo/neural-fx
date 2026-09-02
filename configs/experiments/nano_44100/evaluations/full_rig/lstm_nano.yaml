@@ -1,0 +1,29 @@
+schema_version: '1.0'
+experiment_id: nano_44100_full_rig_lstm_nano_seed42
+run_kind: final
+inference_chunk_size: 65536
+esr_mode: nam
+burn_in_samples: 4096
+esr_pre_emphasis: null
+model:
+  type: lstm
+  config: ../../runs/full_rig/lstm_nano.yaml
+  checkpoint: ../../../../../local/nano_44100/checkpoints/nano_44100_full_rig_lstm_nano_seed42/best.ckpt
+  checkpoint_policy: best
+  benchmark_result: ../../../../../local/nano_44100/results/benchmarks/final/nano_44100_full_rig_lstm_nano_seed42.json
+dataset:
+  input_audio: ../../../../../local/nano_44100/data/full_rig/data/test/input.wav
+  target_audio: ../../../../../local/nano_44100/data/full_rig/data/test/target.wav
+  split: test
+  start_sample: 0
+  num_samples: 3907584
+  latency_samples: 0
+  preparation_delay_samples: 233
+  normalization: paired_peak
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 400
+  deterministic: true
+  selection_metric: val_loss
+  early_stopping: false

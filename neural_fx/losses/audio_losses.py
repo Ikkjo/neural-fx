@@ -4,7 +4,12 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-def pre_emphasis_filter(x: Tensor, coeff: float = 0.95) -> Tensor:
+def pre_emphasis_filter(
+    x: Tensor,
+    coeff: float = 0.95,
+    *,
+    mode: str = "legacy",
+) -> Tensor:
     """
     Apply pre-emphasis filter: y[n] = x[n] - coeff * x[n-1]
 
@@ -13,9 +18,12 @@ def pre_emphasis_filter(x: Tensor, coeff: float = 0.95) -> Tensor:
         coeff: Pre-emphasis coefficient (default 0.95)
 
     Returns:
-        Filtered tensor of same shape as input
+        Filtered tensor. NAM mode drops the first sample.
     """
-    # Keep first sample unchanged, apply filter to rest
+    if mode == "nam":
+        return x[..., 1:] - coeff * x[..., :-1]
+    if mode != "legacy":
+        raise ValueError(f"Unknown ESR mode: {mode}")
     return torch.cat([x[..., :1], x[..., 1:] - coeff * x[..., :-1]], dim=-1)
 
 
@@ -23,16 +31,39 @@ def ESR(
     y_pred: Tensor,
     y_true: Tensor,
     pre_emphasis_coeff: float | None = 0.95,
+    *,
+    mode: str = "legacy",
 ) -> Tensor:
     """
-    Error to signal ratio with pre-emphasis filter.
+    Error to signal ratio with optional pre-emphasis.
+
+    ``legacy`` computes one ratio over the whole tensor. ``nam`` computes a
+    ratio per mono batch item, then averages those ratios.
     """
+    if mode not in {"legacy", "nam"}:
+        raise ValueError(f"Unknown ESR mode: {mode}")
     if pre_emphasis_coeff is None:
         y_true_filtered = y_true
         y_pred_filtered = y_pred
     else:
-        y_true_filtered = pre_emphasis_filter(y_true, pre_emphasis_coeff)
-        y_pred_filtered = pre_emphasis_filter(y_pred, pre_emphasis_coeff)
+        y_true_filtered = pre_emphasis_filter(y_true, pre_emphasis_coeff, mode=mode)
+        y_pred_filtered = pre_emphasis_filter(y_pred, pre_emphasis_coeff, mode=mode)
+    if mode == "nam":
+        if y_pred_filtered.ndim == 3 and y_pred_filtered.shape[1] == 1:
+            y_pred_filtered = y_pred_filtered.squeeze(1)
+            y_true_filtered = y_true_filtered.squeeze(1)
+        if y_pred_filtered.ndim == 1 and y_true_filtered.ndim == 1:
+            y_pred_filtered = y_pred_filtered.unsqueeze(0)
+            y_true_filtered = y_true_filtered.unsqueeze(0)
+        if y_pred_filtered.ndim != 2 or y_true_filtered.ndim != 2:
+            raise ValueError(
+                "NAM ESR expects mono tensors shaped (time,), (batch, time), "
+                "or (batch, 1, time)"
+            )
+        return torch.mean(
+            torch.mean(torch.square(y_pred_filtered - y_true_filtered), dim=1)
+            / torch.mean(torch.square(y_true_filtered), dim=1)
+        )
     return torch.sum(torch.pow(y_true_filtered - y_pred_filtered, 2)) / (
         torch.sum(torch.pow(y_true_filtered, 2)) + 1e-10
     )
@@ -54,6 +85,7 @@ def stft_loss(
     hop_size: int,
     win_size: int,
     window: Tensor | None = None,
+    mode: str = "legacy",
 ) -> tuple[Tensor, Tensor]:
     """
     Compute STFT loss between predicted and target signals.
@@ -81,6 +113,27 @@ def stft_loss(
         y_pred = y_pred.mean(dim=1)
         y_true = y_true.mean(dim=1)
 
+    center = True
+    if mode == "nam":
+        padding = fft_size // 2
+        y_pred = torch.cat(
+            (
+                y_pred[..., 1 : padding + 1].flip(-1),
+                y_pred,
+                y_pred[..., -padding - 1 : -1].flip(-1),
+            ),
+            dim=-1,
+        )
+        y_true = torch.cat(
+            (
+                y_true[..., 1 : padding + 1].flip(-1),
+                y_true,
+                y_true[..., -padding - 1 : -1].flip(-1),
+            ),
+            dim=-1,
+        )
+        center = False
+
     # Compute STFT
     y_pred_stft = torch.stft(
         y_pred,
@@ -88,6 +141,7 @@ def stft_loss(
         hop_length=hop_size,
         win_length=win_size,
         window=window,
+        center=center,
         return_complex=True,
     )
     y_true_stft = torch.stft(
@@ -96,20 +150,33 @@ def stft_loss(
         hop_length=hop_size,
         win_length=win_size,
         window=window,
+        center=center,
         return_complex=True,
     )
 
     # Magnitude spectrograms
-    y_pred_mag = torch.abs(y_pred_stft)
-    y_true_mag = torch.abs(y_true_stft)
+    if mode == "nam":
+        y_pred_mag = torch.sqrt(
+            torch.clamp(torch.view_as_real(y_pred_stft).pow(2).sum(-1), min=1e-8)
+        )
+        y_true_mag = torch.sqrt(
+            torch.clamp(torch.view_as_real(y_true_stft).pow(2).sum(-1), min=1e-8)
+        )
+    elif mode == "legacy":
+        y_pred_mag = torch.abs(y_pred_stft)
+        y_true_mag = torch.abs(y_true_stft)
+    else:
+        raise ValueError(f"Unknown STFT loss mode: {mode}")
 
     # Spectral convergence loss (Eq. 2 in Parallel WaveGAN paper)
-    sc_loss = torch.norm(y_true_mag - y_pred_mag, p="fro") / (
-        torch.norm(y_true_mag, p="fro") + 1e-8
-    )
+    denominator = torch.norm(y_true_mag, p="fro")
+    if mode == "legacy":
+        denominator = denominator + 1e-8
+    sc_loss = torch.norm(y_true_mag - y_pred_mag, p="fro") / denominator
 
     # Log magnitude loss (Eq. 3 in Parallel WaveGAN paper)
-    log_mag_loss = F.l1_loss(safe_log(y_pred_mag), safe_log(y_true_mag))
+    log = torch.log if mode == "nam" else safe_log
+    log_mag_loss = F.l1_loss(log(y_pred_mag), log(y_true_mag))
 
     return sc_loss, log_mag_loss
 
@@ -122,11 +189,13 @@ class SingleResolutionSTFTLoss(nn.Module):
         fft_size: int = 1024,
         hop_size: int = 256,
         win_size: int = 1024,
+        mode: str = "legacy",
     ):
         super().__init__()
         self.fft_size = fft_size
         self.hop_size = hop_size
         self.win_size = win_size
+        self.mode = mode
 
         self.register_buffer("window", torch.hann_window(win_size))
 
@@ -141,6 +210,7 @@ class SingleResolutionSTFTLoss(nn.Module):
         Returns:
             Tuple of (spectral_convergence_loss, log_magnitude_loss)
         """
+        self.window = self.window.to(y_pred.device)
         return stft_loss(
             y_pred,
             y_true,
@@ -148,6 +218,7 @@ class SingleResolutionSTFTLoss(nn.Module):
             self.hop_size,
             self.win_size,
             self.window,
+            self.mode,
         )
 
 
@@ -177,14 +248,17 @@ class MultiResolutionSTFTLoss(nn.Module):
         win_sizes: list[int] | None = None,
         sc_loss_weight: float = 1.0,
         mag_loss_weight: float = 1.0,
+        mode: str = "legacy",
     ):
         super().__init__()
-        if fft_sizes is None:
-            fft_sizes = [512, 1024, 2048]
-        if hop_sizes is None:
-            hop_sizes = [fft // 4 for fft in fft_sizes]
-        if win_sizes is None:
-            win_sizes = fft_sizes
+        if mode == "nam":
+            fft_sizes = fft_sizes or [1024, 2048, 512]
+            hop_sizes = hop_sizes or [120, 240, 50]
+            win_sizes = win_sizes or [600, 1200, 240]
+        else:
+            fft_sizes = fft_sizes or [512, 1024, 2048]
+            hop_sizes = hop_sizes or [fft // 4 for fft in fft_sizes]
+            win_sizes = win_sizes or fft_sizes
 
         if not (len(fft_sizes) == len(hop_sizes) == len(win_sizes)):
             raise ValueError(
@@ -196,7 +270,7 @@ class MultiResolutionSTFTLoss(nn.Module):
 
         self.stft_losses = nn.ModuleList(
             [
-                SingleResolutionSTFTLoss(fft, hop, win)
+                SingleResolutionSTFTLoss(fft, hop, win, mode)
                 for fft, hop, win in zip(fft_sizes, hop_sizes, win_sizes)
             ]
         )

@@ -15,6 +15,8 @@ from typing import Any
 import torch
 import torchaudio
 
+from .latency import LatencyCalibrator
+
 MANIFEST_NAME = "dataset-manifest.json"
 MANIFEST_SCHEMA_VERSION = "1.0"
 
@@ -259,8 +261,6 @@ def prepare_aligned_audio(
         raise FileNotFoundError(f"Target audio does not exist: {target_path}")
     if target_sample_rate <= 0:
         raise ValueError("target_sample_rate must be positive")
-    if target_delay_source_samples < 0:
-        raise ValueError("target_delay_source_samples must be non-negative")
     _validate_splits(splits)
 
     input_hash = sha256_file(input_path)
@@ -294,15 +294,18 @@ def prepare_aligned_audio(
         )
     if not torch.isfinite(input_audio).all() or not torch.isfinite(target_audio).all():
         raise ValueError("Source audio contains NaN or infinite samples")
-    if target_delay_source_samples >= input_audio.shape[-1]:
+    if abs(target_delay_source_samples) >= input_audio.shape[-1]:
         raise ValueError("Alignment delay consumes the entire source recording")
 
     source_samples = int(input_audio.shape[-1])
     input_source_stats = _signal_stats(input_audio)
     target_source_stats = _signal_stats(target_audio)
     if target_delay_source_samples:
-        input_audio = input_audio[..., :-target_delay_source_samples]
-        target_audio = target_audio[..., target_delay_source_samples:]
+        input_audio, target_audio = LatencyCalibrator().apply_delay(
+            input_audio,
+            target_audio,
+            target_delay_source_samples,
+        )
 
     if input_rate != target_sample_rate:
         input_audio = torchaudio.functional.resample(
@@ -383,7 +386,13 @@ def prepare_aligned_audio(
             "alignment": {
                 "method": "fixed_aggregate_cross_correlation",
                 "target_delay_source_samples": target_delay_source_samples,
-                "operation": "trim input tail; trim target head",
+                "operation": (
+                    "trim input tail; trim target head"
+                    if target_delay_source_samples > 0
+                    else "trim input head; trim target tail"
+                    if target_delay_source_samples < 0
+                    else "none"
+                ),
                 "polarity": "preserved",
             },
             "resampling": {

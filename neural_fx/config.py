@@ -107,20 +107,36 @@ class TrainingConfig:
     batch_size: int = 32
     epochs: int = 100
     segment_length: int = 8192
+    validation_segment_length: int | None = None
+    use_receptive_field_context: bool = False
     random_segments: bool = False  # Use random segment sampling
     tbptt: TBPTTConfig | None = None
     seed: int = 42
     deterministic: bool = False
     compile: bool = False
     early_stopping: bool = True
+    early_stopping_patience: int = 10
+    early_stopping_min_delta: float = 0.0
+    early_stopping_min_delta_mode: Literal["absolute", "relative"] = "absolute"
     augmentation: AugmentationConfig | None = None
     num_workers: int = 4
+
+    def __post_init__(self) -> None:
+        if self.early_stopping_patience < 0:
+            raise ValueError("early_stopping_patience cannot be negative")
+        if self.early_stopping_min_delta < 0:
+            raise ValueError("early_stopping_min_delta cannot be negative")
+        if self.early_stopping_min_delta_mode not in {"absolute", "relative"}:
+            raise ValueError(
+                "early_stopping_min_delta_mode must be 'absolute' or 'relative'"
+            )
 
 
 @dataclass
 class OptimizerConfig:
     type: str = "adam"
     lr: float = 0.01
+    weight_decay: float = 0.0
 
 
 @dataclass
@@ -145,6 +161,7 @@ class STFTLossConfig:
     win_sizes: list[int] | None = None
     sc_weight: float = 1.0  # Spectral convergence weight
     mag_weight: float = 1.0  # Log magnitude weight
+    mode: Literal["legacy", "nam"] = "legacy"
 
 
 @dataclass
@@ -158,9 +175,14 @@ class LossWeights:
 class LossConfig:
     type: str = "mse"
     weights: LossWeights | None = None
+    esr_mode: Literal["legacy", "nam"] = "legacy"
     pre_emphasis: PreEmphasisConfig | None = None
     mask_first: int = 0
     stft: STFTLossConfig | None = None
+
+    def __post_init__(self) -> None:
+        if self.esr_mode not in {"legacy", "nam"}:
+            raise ValueError("esr_mode must be 'legacy' or 'nam'")
 
 
 @dataclass
@@ -216,6 +238,7 @@ class NeuralFXConfig:
     lr_scheduler: LRSchedulerConfig
     loss: LossConfig
     data: DataConfig
+    validation_loss: LossConfig | None = None
     latency: LatencyConfig = field(default_factory=LatencyConfig)
     validation: ValidationConfig | None = None
 
@@ -269,13 +292,32 @@ def _load_stft_loss_config(stft_cfg: dict | None) -> STFTLossConfig | None:
     # Create config with defaults
     config = STFTLossConfig(**stft_cfg)
 
-    # Apply default hop_sizes and win_sizes if not provided
+    if config.mode == "nam":
+        return config
+
+    # Apply legacy default hop_sizes and win_sizes if not provided
     if config.hop_sizes is None:
         config.hop_sizes = [fft // 4 for fft in config.fft_sizes]
     if config.win_sizes is None:
         config.win_sizes = config.fft_sizes
 
     return config
+
+
+def _load_loss_config(loss_cfg: dict) -> LossConfig:
+    """Load a training or validation loss configuration."""
+    return LossConfig(
+        type=loss_cfg["type"],
+        weights=LossWeights(**loss_cfg["weights"])
+        if loss_cfg.get("weights") is not None
+        else None,
+        esr_mode=loss_cfg.get("esr_mode", "legacy"),
+        pre_emphasis=PreEmphasisConfig(**loss_cfg["pre_emphasis"])
+        if loss_cfg.get("pre_emphasis") is not None
+        else None,
+        mask_first=loss_cfg.get("mask_first", 0),
+        stft=_load_stft_loss_config(loss_cfg.get("stft")),
+    )
 
 
 def _load_latency_config(lat_cfg: dict | None) -> LatencyConfig:
@@ -323,10 +365,8 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
     aug_cfg = training_cfg.get("augmentation")
     augmentation = _load_augmentation_config(aug_cfg)
 
-    # Load STFT loss config
     loss_cfg = d["loss"]
-    stft_cfg = loss_cfg.get("stft")
-    stft_loss_config = _load_stft_loss_config(stft_cfg)
+    validation_loss_cfg = d.get("validation_loss")
 
     # Load latency and validation configs
     latency_cfg = _load_latency_config(d.get("latency"))
@@ -350,6 +390,10 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             batch_size=training_cfg.get("batch_size", 32),
             epochs=training_cfg.get("epochs", 100),
             segment_length=training_cfg.get("segment_length", 8192),
+            validation_segment_length=training_cfg.get("validation_segment_length"),
+            use_receptive_field_context=training_cfg.get(
+                "use_receptive_field_context", False
+            ),
             random_segments=training_cfg.get("random_segments", False),
             tbptt=TBPTTConfig(**training_cfg["tbptt"])
             if training_cfg.get("tbptt")
@@ -358,27 +402,29 @@ def config_from_dict(d: dict) -> NeuralFXConfig:
             deterministic=training_cfg.get("deterministic", False),
             compile=training_cfg.get("compile", False),
             early_stopping=training_cfg.get("early_stopping", True),
+            early_stopping_patience=training_cfg.get(
+                "early_stopping_patience", 10
+            ),
+            early_stopping_min_delta=training_cfg.get(
+                "early_stopping_min_delta", 0.0
+            ),
+            early_stopping_min_delta_mode=training_cfg.get(
+                "early_stopping_min_delta_mode", "absolute"
+            ),
             augmentation=augmentation,
             num_workers=training_cfg.get("num_workers", 4),
         ),
         optimizer=OptimizerConfig(**optimizer_cfg),
         lr_scheduler=LRSchedulerConfig(**lr_scheduler_cfg),
-        loss=LossConfig(
-            type=loss_cfg["type"],
-            weights=LossWeights(**loss_cfg["weights"])
-            if loss_cfg.get("weights") is not None
-            else None,
-            pre_emphasis=PreEmphasisConfig(**loss_cfg["pre_emphasis"])
-            if loss_cfg.get("pre_emphasis") is not None
-            else None,
-            mask_first=loss_cfg.get("mask_first", 0),
-            stft=stft_loss_config,
-        ),
+        loss=_load_loss_config(loss_cfg),
         data=DataConfig(
             train=DataPaths(**train_data_cfg),
             val=DataPaths(**val_data_cfg) if val_data_cfg else None,
             normalize=data_cfg.get("normalize", True),
         ),
+        validation_loss=_load_loss_config(validation_loss_cfg)
+        if validation_loss_cfg is not None
+        else None,
         latency=latency_cfg,
         validation=validation_cfg,
     )

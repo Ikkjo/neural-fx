@@ -1,0 +1,82 @@
+version: '1.0'
+name: gear_comparison_44100_full_rig_wavenet_12k_seed42
+model:
+  type: wavenet
+  input_size: 1
+  output_size: 1
+  sample_rate: 44100
+  params:
+    layers: 11
+    stacks: 3
+    kernel_size: 2
+    dilation_channels: 7
+    residual_channels: 7
+    skip_channels: 12
+training:
+  batch_size: 16
+  epochs: 100
+  segment_length: 8192
+  validation_segment_length: 65536
+  use_receptive_field_context: true
+  random_segments: false
+  compile: false
+  num_workers: 0
+  seed: 42
+  deterministic: true
+  early_stopping: false
+optimizer:
+  type: adam
+  lr: 0.004
+  weight_decay: 3.17e-07
+lr_scheduler:
+  type: exponential
+  gamma: 0.994
+loss:
+  type: combined
+  weights:
+    esr: 0.0
+    mse: 1.0
+    stft: 0.0005
+  mask_first: 0
+  stft:
+    enabled: true
+    mode: nam
+    fft_sizes:
+    - 1024
+    - 2048
+    - 512
+    hop_sizes:
+    - 120
+    - 240
+    - 50
+    win_sizes:
+    - 600
+    - 1200
+    - 240
+validation_loss:
+  type: combined
+  weights:
+    esr: 1.0
+    mse: 0.0
+    stft: 0.0
+  esr_mode: nam
+  pre_emphasis:
+    enabled: false
+  mask_first: 4096
+data:
+  normalize: false
+  train:
+    input: local/gear_comparison_44100/data/full_rig/data/train/input.wav
+    target: local/gear_comparison_44100/data/full_rig/data/train/target.wav
+  val:
+    input: local/gear_comparison_44100/data/full_rig/data/val/input.wav
+    target: local/gear_comparison_44100/data/full_rig/data/val/target.wav
+latency:
+  method: manual
+  manual_delay: 0
+  calibration_duration_seconds: 0
+validation:
+  enabled: true
+  check_clipping: true
+  check_dc_offset: true
+  ignore_warnings: false

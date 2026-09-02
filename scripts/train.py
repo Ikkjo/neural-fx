@@ -35,6 +35,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Enable or disable compiled model training",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        help="Override the number of DataLoader worker processes",
+    )
+    parser.add_argument(
         "--checkpoint_dir",
         type=Path,
         default=Path("./lightning_logs"),
@@ -52,6 +57,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=50,
         help="Write CSV and TensorBoard metrics every N training steps",
+    )
+    parser.add_argument(
+        "--progress-bar",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Show or hide Lightning progress bars",
     )
     parser.add_argument(
         "--cpu",
@@ -79,6 +90,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override early-stopping patience in epochs",
     )
     parser.add_argument(
+        "--min_delta",
+        type=float,
+        help="Override the minimum early-stopping improvement",
+    )
+    parser.add_argument(
+        "--min_delta_mode",
+        choices=("absolute", "relative"),
+        help="Interpret --min_delta as an absolute value or a fraction",
+    )
+    parser.add_argument(
         "--plot",
         action="store_true",
         help="Generate an analysis report after training",
@@ -96,11 +117,15 @@ def main(argv: list[str] | None = None) -> int:
         resume_path=args.resume,
         ignore_checks=args.ignore_checks,
         patience=args.patience,
+        min_delta=args.min_delta,
+        min_delta_mode=args.min_delta_mode,
         plot=args.plot,
         val_check_interval=args.val_check_interval,
         log_every_n_steps=args.log_every_n_steps,
+        enable_progress_bar=args.progress_bar,
         max_epochs=args.max_epochs,
         compile=args.compile,
+        num_workers=args.num_workers,
         latency_method=args.latency_method,
         latency_manual=args.latency_manual,
     )

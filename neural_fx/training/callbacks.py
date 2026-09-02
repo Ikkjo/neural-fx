@@ -72,12 +72,26 @@ class NeuralFXCheckpoint(ModelCheckpoint):
         # Save metadata as .meta.json
         self._save_metadata(trainer, filepath)
 
-    def save_terminal_checkpoint(self, trainer: L.Trainer) -> Path:
-        """Persist the actual terminal trainer state for reliable resumption."""
-        checkpoint_path = Path(self.dirpath) / "last.ckpt"
-        self._save_checkpoint(trainer, str(checkpoint_path))
-        self.last_model_path = str(checkpoint_path)
-        return checkpoint_path
+    def _save_last_if_needed(self, trainer: L.Trainer) -> None:
+        """Keep ``last.ckpt`` resumable even after top-k stops improving."""
+        if self.save_last and self._last_global_step_saved != trainer.global_step:
+            self._save_last_checkpoint(trainer, self._monitor_candidates(trainer))
+
+    def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
+        super().on_train_epoch_end(trainer, pl_module)
+        if (
+            not self._should_skip_saving_checkpoint(trainer)
+            and self._should_save_on_train_epoch_end(trainer)
+        ):
+            self._save_last_if_needed(trainer)
+
+    def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
+        super().on_validation_end(trainer, pl_module)
+        if (
+            not self._should_skip_saving_checkpoint(trainer)
+            and not self._should_save_on_train_epoch_end(trainer)
+        ):
+            self._save_last_if_needed(trainer)
 
     def _save_metadata(self, trainer: L.Trainer, ckpt_path: str | Path) -> None:
         """Save metadata alongside the checkpoint.
@@ -197,6 +211,7 @@ class ValidationEarlyStopping(EarlyStopping):
         self,
         monitor: str = "val_loss",
         min_delta: float = 0.0,
+        min_delta_mode: str = "absolute",
         patience: int = 10,
         mode: str = "min",
         strict: bool = True,
@@ -207,16 +222,33 @@ class ValidationEarlyStopping(EarlyStopping):
         Args:
             monitor: Metric to monitor for early stopping.
             min_delta: Minimum change to qualify as an improvement.
+            min_delta_mode: Interpret min_delta as an absolute value or a
+                fraction of the best score.
             patience: Number of epochs with no improvement after which training stops.
             mode: "min" or "max" for the monitored metric.
             strict: Whether to crash if the metric is not found.
             **kwargs: Additional arguments passed to EarlyStopping.
         """
+        if min_delta_mode not in {"absolute", "relative"}:
+            raise ValueError("min_delta_mode must be 'absolute' or 'relative'")
+        if min_delta < 0:
+            raise ValueError("min_delta cannot be negative")
+        self.min_delta_mode = min_delta_mode
+        self.relative_min_delta = min_delta if min_delta_mode == "relative" else 0.0
         super().__init__(
             monitor=monitor,
-            min_delta=min_delta,
+            min_delta=0.0 if min_delta_mode == "relative" else min_delta,
             patience=patience,
             mode=mode,
             strict=strict,
             **kwargs,
         )
+
+    def _evaluate_stopping_criteria(
+        self, current: torch.Tensor
+    ) -> tuple[bool, str | None]:
+        """Apply a scale-independent threshold when relative mode is enabled."""
+        if self.min_delta_mode == "relative" and torch.isfinite(self.best_score):
+            absolute_delta = abs(float(self.best_score)) * self.relative_min_delta
+            self.min_delta = absolute_delta if self.mode == "max" else -absolute_delta
+        return super()._evaluate_stopping_criteria(current)

@@ -1,0 +1,129 @@
+schema_version: "1.0"
+experiment_id: "gear-comparison-44100-seed42"
+run_id_prefix: "gear_comparison_44100"
+
+paths:
+  source_root: "data"
+  prepared_root: "local/gear_comparison_44100/data"
+  checkpoint_root: "local/gear_comparison_44100/checkpoints"
+  smoke_checkpoint_root: "local/gear_comparison_44100/smoke-checkpoints"
+  results_root: "local/gear_comparison_44100/results"
+  state_root: "local/gear_comparison_44100/state"
+
+audio:
+  sample_rate: 44100
+  source_samples: 39051249
+  input_file: "DI.wav"
+  input_sha256: "aea90e94cf756e61ac6243998db858437caa41853bb835d1c523f9835a22ac7f"
+  splits:
+    - name: "train"
+      start_sample: 0
+      num_samples: 31162368
+      write_audio: true
+    - name: "guard_train_val"
+      start_sample: 31162368
+      num_samples: 44100
+      write_audio: false
+    - name: "val"
+      start_sample: 31206468
+      num_samples: 3891200
+      write_audio: true
+    - name: "guard_val_test"
+      start_sample: 35097668
+      num_samples: 44100
+      write_audio: false
+    - name: "test"
+      start_sample: 35141768
+      num_samples: 3907584
+      write_audio: true
+
+targets:
+  - id: "ds1_gain_75"
+    file: "ds1_gain_75.wav"
+    sha256: "05b9fbd0735c55b8d5a84bb23b8e73742e69253ca3ef9d2f28cc97731c7b7918"
+    delay_samples: -41
+  - id: "tsmini_gain_75"
+    file: "tsmini_gain_75.wav"
+    sha256: "b9b2f5eb8250d04f5c220ffae756a740772ab3eb71b7e7c6428e2ca75e7254e4"
+    delay_samples: -41
+  - id: "pearl_clean_sm57"
+    file: "pearl_clean_sm57.wav"
+    sha256: "20227efaa4edb4a7f0f060e7386c5816c7ed3dfcd767943952c8663334014bf8"
+    delay_samples: -41
+  - id: "full_rig"
+    file: "full_rig.wav"
+    sha256: "30c67e596387e0231315393e97c188350452ad2113e302978636eb82a0ff5756"
+    delay_samples: -41
+
+models:
+  - id: "wavenet_12k"
+    type: "wavenet"
+    base_config: "configs/models/wavenet/wavenet_12k.yaml"
+    expected_parameters: 12129
+  - id: "lstm_7k"
+    type: "lstm"
+    base_config: "configs/models/lstm/lstm_7k.yaml"
+    expected_parameters: 6921
+  - id: "gru_7k"
+    type: "gru"
+    base_config: "configs/models/gru/gru_7k.yaml"
+    expected_parameters: 6809
+
+training:
+  epochs: 100
+  num_workers: 4
+  seed: 42
+  deterministic: true
+  normalize: false
+  early_stopping:
+    enabled: false
+
+evaluation:
+  burn_in_samples: 4096
+  inference_chunk_size: 65536
+  esr_mode: "nam"
+  esr_pre_emphasis: null
+
+benchmark:
+  device: "cpu"
+  threads: 1
+  block_sizes: [64, 128, 256, 512]
+  num_samples: 44100
+  warmup_runs: 3
+  measurement_runs: 20
+
+smoke:
+  target: "ds1_gain_75"
+  epochs: 1
+
+adoptions:
+  - target: "tsmini_gain_75"
+    model_id: "wavenet_12k"
+    source_checkpoint: "local/nam_recipe_capacity_44100/checkpoints/nam_recipe_capacity_44100_tsmini_gain_75_wavenet_nam_budget_seed42/best.ckpt"
+    source_checkpoint_sha256: "4f3c69d13edb4fab812e07cbd3ca7b1762365be9ac741c7b8dc3ec3209fc9651"
+    source_evaluation: "local/nam_recipe_capacity_44100/results/evaluations/nam_recipe_capacity_44100_tsmini_gain_75_wavenet_nam_budget_seed42/evaluation.json"
+    source_training_epochs: 100
+    selected_epoch: 85
+    global_step: 20468
+    validation_score: 0.0005497519741766155
+    held_out_esr: 0.00029271471430547535
+  - target: "tsmini_gain_75"
+    model_id: "lstm_7k"
+    source_checkpoint: "local/nam_recipe_capacity_44100/checkpoints/nam_recipe_capacity_44100_tsmini_gain_75_lstm_proteus_40_seed42/best.ckpt"
+    source_checkpoint_sha256: "b921cacb84105d72578b4f9847860e330041a1ed084771e40588309ed8b0119a"
+    source_evaluation: "local/nam_recipe_capacity_44100/results/evaluations/nam_recipe_capacity_44100_tsmini_gain_75_lstm_proteus_40_seed42/evaluation.json"
+    source_training_epochs: 100
+    selected_epoch: 89
+    global_step: 21420
+    validation_score: 0.0014096371596679091
+    held_out_esr: 0.0009739292436279356
+  - target: "full_rig"
+    model_id: "wavenet_12k"
+    source_checkpoint: "local/full_rig_delay_neg041_44100/checkpoints/full_rig_delay_neg041_44100_full_rig_delay_neg041_wavenet_12k_seed42/best.ckpt"
+    source_checkpoint_sha256: "24169bd9d9909dfd238b660dc9ab0984c7b154188ae2ac9ff1f2251e16ae4072"
+    source_evaluation: "local/full_rig_delay_neg041_44100/results/evaluations/full_rig_delay_neg041_44100_full_rig_delay_neg041_wavenet_12k_seed42/evaluation.json"
+    source_training_epochs: 100
+    selected_epoch: 85
+    global_step: 20468
+    validation_score: 0.014879699796438217
+    held_out_esr: 0.01610492542386055
