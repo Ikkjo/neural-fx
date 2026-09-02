@@ -28,6 +28,9 @@ NAM_RECIPE_EXPERIMENT = Path(
 NEGATIVE_DELAY_EXPERIMENT = Path(
     "configs/experiments/full_rig_delay_neg041_44100/experiment.yaml"
 ).resolve()
+GEAR_COMPARISON_EXPERIMENT = Path(
+    "configs/experiments/gear_comparison_44100/experiment.yaml"
+).resolve()
 
 
 def _run_manifest() -> dict:
@@ -157,6 +160,23 @@ def test_negative_delay_screen_is_one_controlled_wavenet_run() -> None:
     smoke = build_phase_commands("smoke", NEGATIVE_DELAY_EXPERIMENT)
     worker_flag = smoke[0].argv.index("--num-workers")
     assert smoke[0].argv[worker_flag + 1] == "4"
+
+
+def test_gear_comparison_has_twelve_runs_and_three_adoptions() -> None:
+    experiment = load_experiment(GEAR_COMPARISON_EXPERIMENT)
+    manifest = yaml.safe_load(
+        (GEAR_COMPARISON_EXPERIMENT.parent / "runs.yaml").read_text()
+    )
+
+    assert check_run_files(GEAR_COMPARISON_EXPERIMENT) == []
+    assert len(manifest["runs"]) == 12
+    assert {target["delay_samples"] for target in experiment["targets"]} == {-41}
+    assert {model["id"] for model in experiment["models"]} == {
+        "wavenet_12k",
+        "lstm_7k",
+        "gru_7k",
+    }
+    assert len(experiment["adoptions"]) == 3
 
 
 def test_training_configs_match_the_reviewed_protocol() -> None:
