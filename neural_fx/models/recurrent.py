@@ -189,10 +189,18 @@ class RecurrentNeuralFXModel(BaseNeuralFXModel):
 
         if x.shape[-1] > 0:
             # Transpose for RNN: [Batch, Time, Channels]
-            x = x.transpose(1, 2)
+            x = x.transpose(1, 2).contiguous()
 
             # Run RNN
-            x, new_state = self.rnn(x, self._hidden_state)
+            if x.is_cuda and x.shape[1] > 65_535:
+                outputs = []
+                new_state = self._hidden_state
+                for chunk in x.split(65_535, dim=1):
+                    output, new_state = self.rnn(chunk, new_state)
+                    outputs.append(output)
+                x = torch.cat(outputs, dim=1)
+            else:
+                x, new_state = self.rnn(x, self._hidden_state)
             self._hidden_state = new_state
 
             # FC and back to [Batch, Channels, Time]

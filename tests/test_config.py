@@ -150,6 +150,47 @@ def test_nam_esr_mode_is_loaded_without_changing_the_default() -> None:
         config_from_dict({**base, "loss": {"type": "mse", "esr_mode": "other"}})
 
 
+def test_nam_recipe_training_options_are_opt_in() -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "nam-recipe",
+            "model": {"type": "wavenet", "params": {"layers": 6}},
+            "training": {
+                "validation_segment_length": 65_536,
+                "use_receptive_field_context": True,
+            },
+            "optimizer": {
+                "type": "adam",
+                "lr": 0.004,
+                "weight_decay": 3.17e-7,
+            },
+            "loss": {
+                "type": "combined",
+                "weights": {"mse": 1.0, "esr": 0.0, "stft": 0.0005},
+                "stft": {"enabled": True, "mode": "nam"},
+            },
+            "validation_loss": {
+                "type": "combined",
+                "weights": {"mse": 0.0, "esr": 1.0, "stft": 0.0},
+                "esr_mode": "nam",
+                "mask_first": 4096,
+            },
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+        }
+    )
+
+    assert config.training.validation_segment_length == 65_536
+    assert config.training.use_receptive_field_context is True
+    assert config.optimizer.weight_decay == pytest.approx(3.17e-7)
+    assert config.loss.stft is not None
+    assert config.loss.stft.mode == "nam"
+    assert config.loss.stft.hop_sizes is None
+    assert config.validation_loss is not None
+    assert config.validation_loss.esr_mode == "nam"
+    assert config.validation_loss.mask_first == 4096
+
+
 @pytest.mark.parametrize(
     ("training", "message"),
     [
