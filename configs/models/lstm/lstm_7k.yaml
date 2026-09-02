@@ -1,25 +1,24 @@
 version: "1.0"
-name: "wavenet_nam_budget"
+name: "lstm_7k"
 
 model:
-  type: "wavenet"
+  type: "lstm"
   input_size: 1
   output_size: 1
   sample_rate: 44100
   params:
-    layers: 11
-    stacks: 3
-    kernel_size: 2
-    dilation_channels: 7
-    residual_channels: 7
-    skip_channels: 12
+    hidden_size: 40
+    num_layers: 1
+    conv1d: null
+    skip_connection: true
+    dropout: 0.0
 
 training:
   batch_size: 16
   epochs: 100
   segment_length: 8192
   validation_segment_length: 65536
-  use_receptive_field_context: true
+  use_receptive_field_context: false
   random_segments: false
   compile: false
   num_workers: 0
@@ -39,7 +38,7 @@ loss:
     esr: 0.0
     mse: 1.0
     stft: 0.0005
-  mask_first: 0
+  mask_first: 200
   stft:
     enabled: true
     mode: "nam"

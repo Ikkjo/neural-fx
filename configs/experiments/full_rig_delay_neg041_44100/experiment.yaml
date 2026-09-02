@@ -46,7 +46,7 @@ targets:
 models:
   - id: "wavenet_12k"
     type: "wavenet"
-    base_config: "configs/models/wavenet/wavenet_nam_budget.yaml"
+    base_config: "configs/models/wavenet/wavenet_12k.yaml"
     expected_parameters: 12129
 
 training:

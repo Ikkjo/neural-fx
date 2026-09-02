@@ -54,15 +54,15 @@ models:
     expected_parameters: 6161
   - id: "wavenet_nam_budget"
     type: "wavenet"
-    base_config: "configs/models/wavenet/wavenet_nam_budget.yaml"
+    base_config: "configs/models/wavenet/wavenet_12k.yaml"
     expected_parameters: 12129
   - id: "lstm_proteus_40"
     type: "lstm"
-    base_config: "configs/models/lstm/lstm_proteus_40.yaml"
+    base_config: "configs/models/lstm/lstm_7k.yaml"
     expected_parameters: 6921
   - id: "gru_budget_46"
     type: "gru"
-    base_config: "configs/models/gru/gru_budget_46.yaml"
+    base_config: "configs/models/gru/gru_7k.yaml"
     expected_parameters: 6809
 
 training:

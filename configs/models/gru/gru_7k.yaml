@@ -1,5 +1,5 @@
 version: "1.0"
-name: "gru_budget_46"
+name: "gru_7k"
 
 model:
   type: "gru"
