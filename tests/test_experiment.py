@@ -50,19 +50,27 @@ def test_experiment_has_eight_pairs_and_three_models_per_pair() -> None:
 def test_experiment_supports_multiple_sizes_of_one_model_type(tmp_path: Path) -> None:
     experiment = load_experiment(DEFAULT_EXPERIMENT)
     experiment["targets"] = experiment["targets"][:1]
+    experiment["smoke"]["target"] = experiment["targets"][0]["id"]
     large_lstm = dict(experiment["models"][0])
     large_lstm["id"] = "lstm_large"
     experiment["models"] = [experiment["models"][0], large_lstm]
     experiment_path = tmp_path / "experiment.yaml"
     experiment_path.write_text(yaml.safe_dump(experiment, sort_keys=False))
 
-    files = expected_run_files(experiment_path, output_dir=DEFAULT_EXPERIMENT.parent)
-    run_manifest = yaml.safe_load(files[DEFAULT_EXPERIMENT.parent / "runs.yaml"])
+    files = expected_run_files(experiment_path, output_dir=tmp_path)
+    run_manifest = yaml.safe_load(files[tmp_path / "runs.yaml"])
+    for path, content in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
 
     assert [run["model_id"] for run in run_manifest["runs"]] == [
         "lstm_nano",
         "lstm_large",
     ]
+    assert [
+        command.run_id
+        for command in build_phase_commands("benchmark-initial", experiment_path)
+    ] == ["initialized-lstm_nano", "initialized-lstm_large"]
 
 
 def test_training_configs_match_the_reviewed_protocol() -> None:

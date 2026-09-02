@@ -55,6 +55,25 @@ class _CheckpointModule(L.LightningModule):
         return DataLoader(TensorDataset(torch.ones(2, 1)), batch_size=2)
 
 
+class _ScheduledCheckpointModule(_CheckpointModule):
+    validation_losses = (0.9, 0.8, 0.7, 0.8, 0.9, 1.0)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_train_epochs: list[int] = []
+
+    def training_step(self, batch, batch_idx):
+        self.seen_train_epochs.append(self.current_epoch)
+        return self.weight * 0.0
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.weight * 0.0 + self.weight.new_tensor(
+            self.validation_losses[self.current_epoch]
+        )
+        self.log("val_loss", loss)
+        return loss
+
+
 class TestNeuralFXCheckpoint:
     """Test suite for NeuralFXCheckpoint callback."""
 
@@ -185,6 +204,49 @@ class TestNeuralFXCheckpoint:
         )
         resumed.fit(_CheckpointModule(), ckpt_path=last)
         assert resumed.global_step == 6
+
+    def test_last_checkpoint_is_terminal_after_top_k_stops_improving(
+        self, base_config, tmp_path
+    ):
+        callback = NeuralFXCheckpoint(
+            base_config,
+            dirpath=tmp_path,
+            filename="{epoch:02d}-{val_loss:.4f}",
+            monitor="val_loss",
+            save_top_k=3,
+            save_last=True,
+        )
+        trainer = L.Trainer(
+            max_epochs=5,
+            accelerator="cpu",
+            callbacks=[callback],
+            logger=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+        trainer.fit(_ScheduledCheckpointModule())
+
+        last = tmp_path / "last.ckpt"
+        state = torch.load(last, map_location="cpu", weights_only=False)
+        assert state["epoch"] == 4
+        assert state["global_step"] == 10
+        assert json.loads(last.with_suffix(".meta.json").read_text())["training_info"][
+            "epochs_trained"
+        ] == 5
+
+        resumed_module = _ScheduledCheckpointModule()
+        resumed = L.Trainer(
+            max_epochs=6,
+            accelerator="cpu",
+            callbacks=[NeuralFXCheckpoint(base_config, dirpath=tmp_path)],
+            logger=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+        resumed.fit(resumed_module, ckpt_path=last)
+
+        assert resumed_module.seen_train_epochs == [5, 5]
+        assert resumed.global_step == 12
 
 
 class TestValidationEarlyStopping:

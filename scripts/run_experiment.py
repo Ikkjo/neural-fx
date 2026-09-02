@@ -133,7 +133,7 @@ def build_phase_commands(
         selected = [run for run in runs if run["target"] == experiment["smoke"]["target"]]
         return [
             ExperimentCommand(
-                f"initialized-{run['model_type']}",
+                f"initialized-{run['model_id']}",
                 (
                     python,
                     str(repo_root / "scripts/benchmark.py"),

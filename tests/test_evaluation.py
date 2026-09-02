@@ -50,7 +50,22 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
     model = NeuralfxGRU(
         ModelConfig(type="gru", params=LSTMParams(hidden_size=4, num_layers=1))
     )
-    torch.save(model.state_dict(), checkpoint_path)
+    torch.save(
+        {
+            "state_dict": {
+                f"model.{key}": value for key, value in model.state_dict().items()
+            },
+            "epoch": 3,
+            "global_step": 8,
+            "callbacks": {
+                "NeuralFXCheckpoint": {
+                    "monitor": "val_loss",
+                    "current_score": torch.tensor(0.25),
+                }
+            },
+        },
+        checkpoint_path,
+    )
     time = torch.arange(4096) / 48_000
     input_audio = torch.sin(2 * torch.pi * 220 * time).numpy().astype("float32")
     wavfile.write(input_path, 48_000, input_audio)
@@ -95,6 +110,7 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
         "run_kind",
         "sources",
         "model",
+        "checkpoint",
         "training",
         "inference",
         "dataset",
@@ -115,6 +131,12 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
     assert result["dataset"]["configured_loss_mask_first"] == 64
     assert result["dataset"]["esr_mode"] == "nam"
     assert result["model"]["checkpoint_policy"] == "last"
+    assert result["checkpoint"] == {
+        "epoch": 3,
+        "global_step": 8,
+        "monitor": "val_loss",
+        "monitor_value": 0.25,
+    }
     assert result["dataset"]["metric_samples"] == 3968
     assert result["dataset"]["stft_window_starts"] == [0]
     assert result["inference"] == {
@@ -168,6 +190,10 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
                 "sample_rate": 48_000,
                 "latency_samples": 0,
                 "normalization": "paired_peak",
+                "mask_first": 0,
+                "metric_samples": 4096,
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
             },
             "performance": None,
         }
@@ -192,6 +218,53 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
     assert report["size_groups"][0]["experiments"] == ["lstm", "gru"]
     assert "must not be used as a final quality ranking" in markdown
     assert "[checkpoint](/model.ckpt)" in markdown
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("esr_mode", "legacy"), ("esr_pre_emphasis", 0.85)],
+)
+def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object) -> None:
+    def result(experiment: str) -> dict:
+        return {
+            "experiment_id": experiment,
+            "run_kind": "smoke",
+            "sources": {},
+            "model": {"trainable_parameters": 1},
+            "metrics": {"esr": 1.0},
+            "dataset": {
+                "input_audio": "/input.wav",
+                "target_audio": "/target.wav",
+                "split": "test",
+                "start_sample": 0,
+                "evaluated_samples": 4096,
+                "sample_rate": 48_000,
+                "latency_samples": 0,
+                "normalization": "paired_peak",
+                "mask_first": 0,
+                "metric_samples": 4096,
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+            },
+        }
+
+    first, second = result("first"), result("second")
+    second["dataset"][key] = value
+    with pytest.raises(ValueError, match="same aligned dataset segment"):
+        build_comparison_report([first, second])
+
+
+def test_comparison_report_requires_esr_recipe() -> None:
+    result = {
+        "experiment_id": "incomplete",
+        "run_kind": "smoke",
+        "sources": {},
+        "model": {"trainable_parameters": 1},
+        "metrics": {"esr": 1.0},
+        "dataset": {},
+    }
+    with pytest.raises(ValueError, match="must record esr_mode and esr_pre_emphasis"):
+        build_comparison_report([result])
 
 
 @pytest.mark.parametrize(

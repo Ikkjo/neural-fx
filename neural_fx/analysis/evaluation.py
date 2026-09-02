@@ -239,6 +239,45 @@ def _calculate_evaluation_metrics(
     return metrics, recipe
 
 
+def _checkpoint_training_state(
+    checkpoint_path: str | Path,
+) -> dict[str, int | float | str | None]:
+    """Read training state when the artifact is a Lightning checkpoint."""
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    training_state: dict[str, int | float | str | None] = {
+        "epoch": None,
+        "global_step": None,
+        "monitor": None,
+        "monitor_value": None,
+    }
+    if not isinstance(checkpoint, dict):
+        return training_state
+
+    for key in ("epoch", "global_step"):
+        value = checkpoint.get(key)
+        if isinstance(value, torch.Tensor) and value.numel() == 1:
+            value = value.item()
+        if isinstance(value, int):
+            training_state[key] = value
+
+    callbacks = checkpoint.get("callbacks")
+    if not isinstance(callbacks, dict):
+        return training_state
+    for state in callbacks.values():
+        if not isinstance(state, dict) or "monitor" not in state or "current_score" not in state:
+            continue
+        monitor = state["monitor"]
+        score = state["current_score"]
+        if isinstance(score, torch.Tensor) and score.numel() == 1:
+            score = score.item()
+        training_state["monitor"] = monitor if isinstance(monitor, str) else None
+        training_state["monitor_value"] = (
+            float(score) if isinstance(score, (int, float)) else None
+        )
+        break
+    return training_state
+
+
 def _write_listening_samples(
     signals: _EvaluationSignals,
     output_dir: Path,
@@ -339,6 +378,7 @@ def evaluate_experiment(
                 else {}
             ),
         },
+        "checkpoint": _checkpoint_training_state(model_spec["checkpoint"]),
         "training": manifest["training"],
         "inference": {
             "chunk_size": signals.chunk_size,
@@ -430,7 +470,15 @@ def build_comparison_report(
         "normalization",
         "mask_first",
         "metric_samples",
+        "esr_mode",
+        "esr_pre_emphasis",
     )
+    for result in results:
+        dataset = result.get("dataset", {})
+        if "esr_mode" not in dataset or "esr_pre_emphasis" not in dataset:
+            raise ValueError(
+                "Evaluation results must record esr_mode and esr_pre_emphasis before comparison"
+            )
     expected_dataset = {
         key: results[0].get("dataset", {}).get(key) for key in dataset_keys
     }
@@ -461,6 +509,7 @@ def build_comparison_report(
                 "run_kind": result["run_kind"],
                 "model": result["model"],
                 "metrics": result["metrics"],
+                "checkpoint": result.get("checkpoint"),
                 "offline_real_time_factor": offline.get("real_time_factor"),
                 "block_128_p95_ms": block_128.get("p95_ms") if block_128 else None,
                 "sources": result["sources"],

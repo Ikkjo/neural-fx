@@ -72,6 +72,27 @@ class NeuralFXCheckpoint(ModelCheckpoint):
         # Save metadata as .meta.json
         self._save_metadata(trainer, filepath)
 
+    def _save_last_if_needed(self, trainer: L.Trainer) -> None:
+        """Keep ``last.ckpt`` resumable even after top-k stops improving."""
+        if self.save_last and self._last_global_step_saved != trainer.global_step:
+            self._save_last_checkpoint(trainer, self._monitor_candidates(trainer))
+
+    def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
+        super().on_train_epoch_end(trainer, pl_module)
+        if (
+            not self._should_skip_saving_checkpoint(trainer)
+            and self._should_save_on_train_epoch_end(trainer)
+        ):
+            self._save_last_if_needed(trainer)
+
+    def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
+        super().on_validation_end(trainer, pl_module)
+        if (
+            not self._should_skip_saving_checkpoint(trainer)
+            and not self._should_save_on_train_epoch_end(trainer)
+        ):
+            self._save_last_if_needed(trainer)
+
     def _save_metadata(self, trainer: L.Trainer, ckpt_path: str | Path) -> None:
         """Save metadata alongside the checkpoint.
 
