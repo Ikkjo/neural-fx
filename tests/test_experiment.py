@@ -1,5 +1,7 @@
 """Regression tests for the 44.1 kHz nano experiment."""
 
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -10,13 +12,14 @@ from neural_fx.config import load_config
 from neural_fx.models import create_model_from_config
 from scripts.prepare_experiment import (
     DEFAULT_EXPERIMENT,
+    adopt_experiment_checkpoints,
     check_run_files,
     expected_run_files,
     experiment_splits,
     load_experiment,
     write_run_files,
 )
-from scripts.run_experiment import build_phase_commands
+from scripts.run_experiment import _completed_training_epochs, build_phase_commands
 
 EXPECTED_PARAMETERS = {"lstm": 3_129, "gru": 2_369, "wavenet": 6_161}
 NAM_RECIPE_EXPERIMENT = Path(
@@ -79,6 +82,56 @@ def test_experiment_supports_multiple_sizes_of_one_model_type(tmp_path: Path) ->
     ] == ["initialized-lstm_nano", "initialized-lstm_large"]
 
 
+def test_adopted_checkpoint_counts_as_completed_training(tmp_path: Path) -> None:
+    run_id = "adopted-run"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    (run_dir / "adopted.meta.json").write_text(
+        '{"training_info": {"epochs_trained": 100}}\n'
+    )
+
+    experiment = {"paths": {"checkpoint_root": str(tmp_path)}}
+    assert _completed_training_epochs(experiment, run_id) == 100
+
+
+def test_checkpoint_adoption_verifies_and_records_source(tmp_path: Path) -> None:
+    experiment = load_experiment(DEFAULT_EXPERIMENT)
+    experiment["targets"] = experiment["targets"][:1]
+    experiment["models"] = experiment["models"][:1]
+    experiment["paths"]["checkpoint_root"] = str(tmp_path / "checkpoints")
+    source = tmp_path / "source.ckpt"
+    source.write_bytes(b"selected checkpoint")
+    source_evaluation = tmp_path / "evaluation.json"
+    source_evaluation.write_text(json.dumps({"metrics": {"esr": 0.25}}))
+    experiment["adoptions"] = [
+        {
+            "target": experiment["targets"][0]["id"],
+            "model_id": experiment["models"][0]["id"],
+            "source_checkpoint": str(source),
+            "source_checkpoint_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "source_evaluation": str(source_evaluation),
+            "source_training_epochs": 100,
+            "selected_epoch": 85,
+            "global_step": 20468,
+            "validation_score": 0.1,
+            "held_out_esr": 0.25,
+        }
+    ]
+    experiment_path = tmp_path / "experiment.yaml"
+    experiment_path.write_text(yaml.safe_dump(experiment, sort_keys=False))
+
+    changed = adopt_experiment_checkpoints(experiment_path)
+    destination = next(path for path in changed if path.name == "best.ckpt")
+    metadata = json.loads((destination.parent / "adopted.meta.json").read_text())
+
+    assert destination.read_bytes() == source.read_bytes()
+    assert metadata["training_info"]["epochs_trained"] == 100
+    assert metadata["adoption"]["selected_epoch"] == 85
+    source.unlink()
+    source_evaluation.unlink()
+    assert adopt_experiment_checkpoints(experiment_path) == []
+
+
 def test_negative_delay_screen_is_one_controlled_wavenet_run() -> None:
     experiment = load_experiment(NEGATIVE_DELAY_EXPERIMENT)
     files = expected_run_files(NEGATIVE_DELAY_EXPERIMENT)
@@ -99,11 +152,11 @@ def test_negative_delay_screen_is_one_controlled_wavenet_run() -> None:
     ]
     assert run["model_id"] == "wavenet_12k"
     assert config.training.epochs == 100
+    assert evaluation["dataset"]["latency_samples"] == 0
+    assert evaluation["dataset"]["preparation_delay_samples"] == -41
     smoke = build_phase_commands("smoke", NEGATIVE_DELAY_EXPERIMENT)
     worker_flag = smoke[0].argv.index("--num-workers")
     assert smoke[0].argv[worker_flag + 1] == "4"
-    assert evaluation["dataset"]["latency_samples"] == 0
-    assert evaluation["dataset"]["preparation_delay_samples"] == -41
 
 
 def test_training_configs_match_the_reviewed_protocol() -> None:

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +15,11 @@ import yaml
 
 from neural_fx.config import load_config
 from neural_fx.models import create_model_from_config
-from neural_fx.preprocessing.experiment_data import SplitSpec, prepare_aligned_audio
+from neural_fx.preprocessing.experiment_data import (
+    SplitSpec,
+    prepare_aligned_audio,
+    sha256_file,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_EXPERIMENT = REPO_ROOT / "configs/experiments/nano_44100/experiment.yaml"
@@ -365,6 +371,74 @@ def prepare_experiment_audio(
     return written
 
 
+def adopt_experiment_checkpoints(
+    experiment_path: Path, *, repo_root: Path = REPO_ROOT
+) -> list[Path]:
+    """Copy verified completed checkpoints into their final run directories."""
+    experiment = load_experiment(experiment_path)
+    written: list[Path] = []
+    targets = {target["id"]: target for target in experiment["targets"]}
+    models = {model["id"]: model for model in experiment["models"]}
+    checkpoint_root = _repo_path(experiment["paths"]["checkpoint_root"], repo_root)
+    for adoption in experiment.get("adoptions", []):
+        target = targets[adoption["target"]]
+        model = models[adoption["model_id"]]
+        run_id = _run_id(experiment, target["id"], model)
+        destination_dir = checkpoint_root / run_id
+        destination = destination_dir / "best.ckpt"
+        metadata_path = destination_dir / "adopted.meta.json"
+        expected_hash = adoption["source_checkpoint_sha256"]
+        if destination.is_file() and metadata_path.is_file():
+            if sha256_file(destination) != expected_hash:
+                raise FileExistsError(f"Adopted checkpoint differs: {destination}")
+            continue
+
+        source = _repo_path(adoption["source_checkpoint"], repo_root)
+        source_hash = sha256_file(source)
+        if source_hash != expected_hash:
+            raise ValueError(f"Adopted checkpoint hash does not match: {source}")
+        source_evaluation = _repo_path(adoption["source_evaluation"], repo_root)
+        evaluation = json.loads(source_evaluation.read_text())
+        if evaluation["metrics"]["esr"] != adoption["held_out_esr"]:
+            raise ValueError(f"Adopted evaluation ESR does not match: {source_evaluation}")
+
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        if destination.is_file():
+            if sha256_file(destination) != source_hash:
+                raise FileExistsError(f"Adopted checkpoint differs: {destination}")
+        else:
+            temporary = destination.with_suffix(".tmp")
+            shutil.copy2(source, temporary)
+            temporary.replace(destination)
+            written.append(destination)
+
+        metadata = {
+            "schema_version": "1.0",
+            "checkpoint_file": "best.ckpt",
+            "run_id": run_id,
+            "training_info": {
+                "epochs_trained": adoption["source_training_epochs"],
+            },
+            "adoption": {
+                "source_checkpoint": _repository_reference(source, repo_root),
+                "source_checkpoint_sha256": source_hash,
+                "source_evaluation": _repository_reference(
+                    source_evaluation, repo_root
+                ),
+                "selected_epoch": adoption["selected_epoch"],
+                "global_step": adoption["global_step"],
+                "validation_score": adoption["validation_score"],
+                "held_out_esr": adoption["held_out_esr"],
+                "preparation_delay_samples": target["delay_samples"],
+            },
+        }
+        content = json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        if not metadata_path.is_file() or metadata_path.read_text() != content:
+            metadata_path.write_text(content)
+            written.append(metadata_path)
+    return written
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
@@ -372,6 +446,9 @@ def main() -> int:
     subparsers.add_parser("generate", help="Write the tracked run files")
     subparsers.add_parser("check", help="Check generated files without changing them")
     subparsers.add_parser("prepare-audio", help="Write ignored aligned audio splits")
+    subparsers.add_parser(
+        "adopt-checkpoints", help="Copy verified completed checkpoints into this experiment"
+    )
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -386,8 +463,12 @@ def main() -> int:
             return 1
         print("Experiment run files match the experiment")
         return 0
-    written = prepare_experiment_audio(args.experiment)
-    print(f"Prepared experiment audio; created {len(written)} target directorie(s)")
+    if args.command == "prepare-audio":
+        written = prepare_experiment_audio(args.experiment)
+        print(f"Prepared experiment audio; created {len(written)} target directorie(s)")
+        return 0
+    written = adopt_experiment_checkpoints(args.experiment)
+    print(f"Adopted experiment checkpoints; changed {len(written)} path(s)")
     return 0
 
 

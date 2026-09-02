@@ -113,6 +113,10 @@ def build_phase_commands(
         checkpoint_root = _repo_path(paths["checkpoint_root"], repo_root)
         commands = []
         for run in runs:
+            if _completed_training_epochs(experiment, run["id"]) >= experiment[
+                "training"
+            ]["epochs"]:
+                continue
             argv = [
                 python,
                 str(repo_root / "scripts/train.py"),
@@ -232,13 +236,13 @@ def _write_state(path: Path, state: dict[str, Any]) -> None:
 
 def _completed_training_epochs(experiment: dict[str, Any], run_id: str) -> int:
     checkpoint_root = _repo_path(experiment["paths"]["checkpoint_root"])
-    metadata_path = checkpoint_root / run_id / "last.meta.json"
-    if not metadata_path.is_file():
-        return 0
-    metadata = json.loads(metadata_path.read_text())
-    training_info = metadata.get("training_info", {})
-    epochs = training_info.get("epochs_trained", 0)
-    return epochs if isinstance(epochs, int) else 0
+    for filename in ("last.meta.json", "adopted.meta.json"):
+        metadata_path = checkpoint_root / run_id / filename
+        if metadata_path.is_file():
+            metadata = json.loads(metadata_path.read_text())
+            epochs = metadata.get("training_info", {}).get("epochs_trained", 0)
+            return epochs if isinstance(epochs, int) else 0
+    return 0
 
 
 def execute_phase(
@@ -269,6 +273,14 @@ def execute_phase(
     failures = 0
     for command in commands:
         previous = state["runs"].get(command.run_id, {})
+        if (
+            phase == "train"
+            and not rerun_completed
+            and _completed_training_epochs(experiment, command.run_id)
+            >= experiment["training"]["epochs"]
+        ):
+            print(f"Skipping completed {command.run_id}")
+            continue
         if previous.get("status") == "completed" and not rerun_completed:
             if phase != "train" or _completed_training_epochs(
                 experiment, command.run_id
