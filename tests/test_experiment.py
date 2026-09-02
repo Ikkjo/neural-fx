@@ -22,6 +22,9 @@ EXPECTED_PARAMETERS = {"lstm": 3_129, "gru": 2_369, "wavenet": 6_161}
 NAM_RECIPE_EXPERIMENT = Path(
     "configs/experiments/nam_recipe_capacity_44100/experiment.yaml"
 ).resolve()
+NEGATIVE_DELAY_EXPERIMENT = Path(
+    "configs/experiments/full_rig_delay_neg041_44100/experiment.yaml"
+).resolve()
 
 
 def _run_manifest() -> dict:
@@ -74,6 +77,33 @@ def test_experiment_supports_multiple_sizes_of_one_model_type(tmp_path: Path) ->
         command.run_id
         for command in build_phase_commands("benchmark-initial", experiment_path)
     ] == ["initialized-lstm_nano", "initialized-lstm_large"]
+
+
+def test_negative_delay_screen_is_one_controlled_wavenet_run() -> None:
+    experiment = load_experiment(NEGATIVE_DELAY_EXPERIMENT)
+    files = expected_run_files(NEGATIVE_DELAY_EXPERIMENT)
+    run_manifest = yaml.safe_load(files[NEGATIVE_DELAY_EXPERIMENT.parent / "runs.yaml"])
+    run = run_manifest["runs"][0]
+    config = load_config(Path(run["config"]))
+    evaluation = load_experiment_manifest(run["evaluation_manifest"])
+
+    assert len(run_manifest["runs"]) == 1
+    assert check_run_files(NEGATIVE_DELAY_EXPERIMENT) == []
+    assert experiment["targets"] == [
+        {
+            "id": "full_rig_delay_neg041",
+            "file": "full_rig.wav",
+            "sha256": "30c67e596387e0231315393e97c188350452ad2113e302978636eb82a0ff5756",
+            "delay_samples": -41,
+        }
+    ]
+    assert run["model_id"] == "wavenet_12k"
+    assert config.training.epochs == 100
+    smoke = build_phase_commands("smoke", NEGATIVE_DELAY_EXPERIMENT)
+    worker_flag = smoke[0].argv.index("--num-workers")
+    assert smoke[0].argv[worker_flag + 1] == "4"
+    assert evaluation["dataset"]["latency_samples"] == 0
+    assert evaluation["dataset"]["preparation_delay_samples"] == -41
 
 
 def test_training_configs_match_the_reviewed_protocol() -> None:
