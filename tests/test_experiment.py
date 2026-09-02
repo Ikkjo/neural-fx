@@ -19,6 +19,9 @@ from scripts.prepare_experiment import (
 from scripts.run_experiment import build_phase_commands
 
 EXPECTED_PARAMETERS = {"lstm": 3_129, "gru": 2_369, "wavenet": 6_161}
+NAM_RECIPE_EXPERIMENT = Path(
+    "configs/experiments/nam_recipe_capacity_44100/experiment.yaml"
+).resolve()
 
 
 def _run_manifest() -> dict:
@@ -179,3 +182,43 @@ def test_full_training_disables_progress_bars() -> None:
         assert "--num-workers" in command.argv
         index = command.argv.index("--num-workers")
         assert command.argv[index + 1] == "0"
+
+
+def test_nam_recipe_capacity_configs_match_the_approved_plan() -> None:
+    assert check_run_files(NAM_RECIPE_EXPERIMENT) == []
+    manifest = yaml.safe_load((NAM_RECIPE_EXPERIMENT.parent / "runs.yaml").read_text())
+    expected = {
+        "wavenet_nano_nam_recipe": (6_161, 127, 0, True),
+        "wavenet_nam_budget": (12_129, 6_142, 0, True),
+        "lstm_proteus_40": (6_921, 1, 200, False),
+    }
+
+    assert len(manifest["runs"]) == 6
+    for run in manifest["runs"]:
+        config = load_config(run["config"])
+        model = create_model_from_config(config.model)
+        parameters, receptive_field, burn_in, uses_context = expected[run["model_id"]]
+        assert (model.num_params, model.receptive_field) == (
+            parameters,
+            receptive_field,
+        )
+        assert config.training.batch_size == 16
+        assert config.training.segment_length == 8192
+        assert config.training.validation_segment_length == 65_536
+        assert config.training.use_receptive_field_context is uses_context
+        assert config.optimizer.lr == 0.004
+        assert config.optimizer.weight_decay == pytest.approx(3.17e-7)
+        assert config.lr_scheduler.gamma == 0.994
+        assert config.loss.mask_first == burn_in
+        assert config.loss.stft is not None and config.loss.stft.mode == "nam"
+        assert config.validation_loss is not None
+        assert config.validation_loss.esr_mode == "nam"
+        assert config.validation_loss.mask_first == 4096
+        assert config.data.normalize is False
+
+
+def test_nam_recipe_capacity_commands_cover_each_run_without_state_collisions() -> None:
+    assert len(build_phase_commands("smoke", NAM_RECIPE_EXPERIMENT)) == 3
+    assert len(build_phase_commands("train", NAM_RECIPE_EXPERIMENT)) == 6
+    initial = build_phase_commands("benchmark-initial", NAM_RECIPE_EXPERIMENT)
+    assert len({command.run_id for command in initial}) == len(initial) == 3
