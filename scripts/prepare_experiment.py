@@ -202,6 +202,7 @@ def _evaluation_manifest(
             "start_sample": 0,
             "num_samples": test_samples,
             "latency_samples": 0,
+            "preparation_delay_samples": target["delay_samples"],
             "normalization": "paired_peak" if training["normalize"] else "none",
             "metric_mask_first": evaluation["burn_in_samples"],
         },

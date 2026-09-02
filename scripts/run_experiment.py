@@ -100,6 +100,8 @@ def build_phase_commands(
                     str(checkpoint_root),
                     "--max_epochs",
                     str(experiment["smoke"]["epochs"]),
+                    "--num-workers",
+                    str(experiment["training"]["num_workers"]),
                     "--log_every_n_steps",
                     "1",
                 ),

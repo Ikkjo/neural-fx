@@ -18,6 +18,7 @@ dataset:
   start_sample: 0
   num_samples: 3907584
   latency_samples: 0
+  preparation_delay_samples: 62
   normalization: paired_peak
   metric_mask_first: 4096
 training:

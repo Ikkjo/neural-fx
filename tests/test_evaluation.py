@@ -189,6 +189,7 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
                 "evaluated_samples": 4096,
                 "sample_rate": 48_000,
                 "latency_samples": 0,
+                "preparation_delay_samples": 0,
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,
@@ -222,7 +223,11 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
 
 @pytest.mark.parametrize(
     ("key", "value"),
-    [("esr_mode", "legacy"), ("esr_pre_emphasis", 0.85)],
+    [
+        ("esr_mode", "legacy"),
+        ("esr_pre_emphasis", 0.85),
+        ("preparation_delay_samples", -41),
+    ],
 )
 def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object) -> None:
     def result(experiment: str) -> dict:
@@ -240,6 +245,7 @@ def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object
                 "evaluated_samples": 4096,
                 "sample_rate": 48_000,
                 "latency_samples": 0,
+                "preparation_delay_samples": 0,
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,

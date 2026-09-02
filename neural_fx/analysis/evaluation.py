@@ -467,6 +467,7 @@ def build_comparison_report(
         "evaluated_samples",
         "sample_rate",
         "latency_samples",
+        "preparation_delay_samples",
         "normalization",
         "mask_first",
         "metric_samples",
