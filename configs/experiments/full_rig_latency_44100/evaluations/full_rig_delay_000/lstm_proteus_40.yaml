@@ -1,0 +1,28 @@
+schema_version: '1.0'
+experiment_id: full_rig_latency_44100_full_rig_delay_000_lstm_proteus_40_seed42
+run_kind: final
+inference_chunk_size: 65536
+esr_mode: nam
+burn_in_samples: 4096
+esr_pre_emphasis: null
+model:
+  type: lstm
+  config: ../../runs/full_rig_delay_000/lstm_proteus_40.yaml
+  checkpoint: ../../../../../local/full_rig_latency_44100/checkpoints/full_rig_latency_44100_full_rig_delay_000_lstm_proteus_40_seed42/best.ckpt
+  checkpoint_policy: best
+  benchmark_result: ../../../../../local/full_rig_latency_44100/results/benchmarks/final/full_rig_latency_44100_full_rig_delay_000_lstm_proteus_40_seed42.json
+dataset:
+  input_audio: ../../../../../local/full_rig_latency_44100/data/full_rig_delay_000/data/test/input.wav
+  target_audio: ../../../../../local/full_rig_latency_44100/data/full_rig_delay_000/data/test/target.wav
+  split: test
+  start_sample: 0
+  num_samples: 3907584
+  latency_samples: 0
+  normalization: none
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 100
+  deterministic: true
+  selection_metric: val_loss
+  early_stopping: false

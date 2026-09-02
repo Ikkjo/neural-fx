@@ -1,0 +1,93 @@
+schema_version: "1.0"
+experiment_id: "full-rig-latency-44100-seed42"
+run_id_prefix: "full_rig_latency_44100"
+
+paths:
+  source_root: "data"
+  prepared_root: "local/full_rig_latency_44100/data"
+  checkpoint_root: "local/full_rig_latency_44100/checkpoints"
+  smoke_checkpoint_root: "local/full_rig_latency_44100/smoke-checkpoints"
+  results_root: "local/full_rig_latency_44100/results"
+  state_root: "local/full_rig_latency_44100/state"
+
+audio:
+  sample_rate: 44100
+  source_samples: 39051249
+  input_file: "DI.wav"
+  input_sha256: "aea90e94cf756e61ac6243998db858437caa41853bb835d1c523f9835a22ac7f"
+  splits:
+    - name: "train"
+      start_sample: 0
+      num_samples: 31162368
+      write_audio: true
+    - name: "guard_train_val"
+      start_sample: 31162368
+      num_samples: 44100
+      write_audio: false
+    - name: "val"
+      start_sample: 31206468
+      num_samples: 3891200
+      write_audio: true
+    - name: "guard_val_test"
+      start_sample: 35097668
+      num_samples: 44100
+      write_audio: false
+    - name: "test"
+      start_sample: 35141768
+      num_samples: 3907584
+      write_audio: true
+
+targets:
+  - id: "full_rig_delay_000"
+    file: "full_rig.wav"
+    sha256: "30c67e596387e0231315393e97c188350452ad2113e302978636eb82a0ff5756"
+    delay_samples: 0
+  - id: "full_rig_delay_050"
+    file: "full_rig.wav"
+    sha256: "30c67e596387e0231315393e97c188350452ad2113e302978636eb82a0ff5756"
+    delay_samples: 50
+
+models:
+  - id: "wavenet_nano_nam_recipe"
+    type: "wavenet"
+    base_config: "configs/models/wavenet/wavenet_nano_nam_recipe.yaml"
+    expected_parameters: 6161
+  - id: "wavenet_nam_budget"
+    type: "wavenet"
+    base_config: "configs/models/wavenet/wavenet_nam_budget.yaml"
+    expected_parameters: 12129
+  - id: "lstm_proteus_40"
+    type: "lstm"
+    base_config: "configs/models/lstm/lstm_proteus_40.yaml"
+    expected_parameters: 6921
+  - id: "gru_budget_46"
+    type: "gru"
+    base_config: "configs/models/gru/gru_budget_46.yaml"
+    expected_parameters: 6809
+
+training:
+  epochs: 100
+  num_workers: 0
+  seed: 42
+  deterministic: true
+  normalize: false
+  early_stopping:
+    enabled: false
+
+evaluation:
+  burn_in_samples: 4096
+  inference_chunk_size: 65536
+  esr_mode: "nam"
+  esr_pre_emphasis: null
+
+benchmark:
+  device: "cpu"
+  threads: 1
+  block_sizes: [64, 128, 256, 512]
+  num_samples: 44100
+  warmup_runs: 3
+  measurement_runs: 20
+
+smoke:
+  target: "full_rig_delay_000"
+  epochs: 1
