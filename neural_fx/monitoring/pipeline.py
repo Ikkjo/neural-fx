@@ -253,6 +253,33 @@ def monitor_artifact(
                     f"Case '{case.case_id}' prediction contains NaN or Inf",
                     category="execution",
                 )
+            prediction_peak = float(prediction.abs().max())
+            validation_checks.append(
+                _check(
+                    case.case_id,
+                    "prediction_amplitude",
+                    prediction_peak <= manifest.max_abs,
+                    f"prediction peak absolute amplitude is {prediction_peak:.6f}",
+                    severity="warning",
+                    value=prediction_peak,
+                )
+            )
+            prediction_clipped = int(
+                (prediction.abs() >= manifest.clipping_threshold).sum()
+            )
+            validation_checks.append(
+                _check(
+                    case.case_id,
+                    "prediction_clipping",
+                    prediction_clipped == 0,
+                    (
+                        f"prediction has {prediction_clipped} samples at or above "
+                        f"{manifest.clipping_threshold}"
+                    ),
+                    severity="warning",
+                    value=prediction_clipped,
+                )
+            )
             metrics, diagnostics = quality_metrics(
                 prediction, target_batch, manifest, stft_loss
             )
@@ -353,6 +380,11 @@ def monitor_artifact(
             "path": str(artifact.path),
             "type": artifact.artifact_type,
             "inference_category": artifact.inference_category,
+            "effective_inference_chunk_size": (
+                manifest.inference_chunk_size
+                if artifact.artifact_type == "checkpoint"
+                else None
+            ),
             "sha256": sha256_file(artifact.path),
             "size_bytes": artifact_size,
             "config_path": str(Path(config_path).resolve()) if config_path else None,

@@ -18,6 +18,10 @@ def _rows(report: MonitoringReport) -> list[dict[str, Any]]:
         "suite_fingerprint": report.suite["fingerprint"],
         "artifact_type": report.artifact["type"],
         "artifact_sha256": report.artifact["sha256"],
+        "inference_category": report.artifact["inference_category"],
+        "effective_inference_chunk_size": report.artifact[
+            "effective_inference_chunk_size"
+        ],
         "model_type": report.artifact["model_type"],
         "device_class": report.runtime["device_class"],
         "device_name": report.runtime["device_name"],
@@ -81,8 +85,16 @@ def _write_csv(report: MonitoringReport, path: Path) -> None:
 
 
 def _write_html(report: MonitoringReport, path: Path) -> None:
+    def display(value: Any) -> str:
+        if value is None:
+            return "N/A"
+        if isinstance(value, float):
+            return f"{value:.8g}"
+        return str(value)
+
     metric_rows = "".join(
-        f"<tr><th>{html.escape(name)}</th><td>{value:.8g}</td></tr>"
+        f"<tr><th>{html.escape(name)}</th>"
+        f"<td>{html.escape(display(value))}</td></tr>"
         for name, value in report.aggregate["metrics"].items()
     )
     count_rows = "".join(
@@ -122,6 +134,7 @@ def write_monitoring_outputs(
     output_dir: str | Path,
     *,
     include_html: bool = False,
+    overwrite: bool = False,
 ) -> dict[str, Path]:
     """Write JSON, CSV, and optional HTML from one monitoring report."""
     output_dir = Path(output_dir)
@@ -130,9 +143,15 @@ def write_monitoring_outputs(
         "json": output_dir / "monitoring.json",
         "csv": output_dir / "monitoring.csv",
     }
-    paths["json"].write_text(json.dumps(report.to_dict(), indent=2, allow_nan=False) + "\n")
-    _write_csv(report, paths["csv"])
     if include_html:
         paths["html"] = output_dir / "monitoring.html"
+    existing = [path for path in paths.values() if path.exists()]
+    if existing and not overwrite:
+        raise FileExistsError(f"Monitoring output already exists: {existing[0]}")
+    paths["json"].write_text(
+        json.dumps(report.to_dict(), indent=2, allow_nan=False) + "\n"
+    )
+    _write_csv(report, paths["csv"])
+    if include_html:
         _write_html(report, paths["html"])
     return paths

@@ -176,6 +176,7 @@ class MonitoringManifest:
     warmup_runs: int
     measurement_runs: int
     quality_metrics: tuple[str, ...]
+    esr_mode: Literal["legacy", "nam"]
     esr_pre_emphasis: float | None
     clipping_threshold: float
     max_abs: float
@@ -208,7 +209,7 @@ class MonitoringManifest:
                 "max_abs",
                 "cases",
             },
-            optional={"allow_target_full_scale"},
+            optional={"allow_target_full_scale", "esr_mode"},
         )
         manifest_path = Path(manifest_path).expanduser().resolve()
         schema_version = data["schema_version"]
@@ -278,6 +279,10 @@ class MonitoringManifest:
         if not quality_metrics or len(set(quality_metrics)) != len(quality_metrics):
             raise ValueError("quality_metrics must be non-empty and unique")
 
+        esr_mode = data.get("esr_mode", "legacy")
+        if esr_mode not in {"legacy", "nam"}:
+            raise ValueError("esr_mode must be 'legacy' or 'nam'")
+
         esr_value = data["esr_pre_emphasis"]
         esr_pre_emphasis = (
             None
@@ -313,6 +318,7 @@ class MonitoringManifest:
             warmup_runs=warmup_runs,
             measurement_runs=measurement_runs,
             quality_metrics=quality_metrics,
+            esr_mode=esr_mode,
             esr_pre_emphasis=esr_pre_emphasis,
             clipping_threshold=clipping_threshold,
             max_abs=max_abs,
@@ -336,6 +342,7 @@ class MonitoringManifest:
             "warmup_runs": self.warmup_runs,
             "measurement_runs": self.measurement_runs,
             "quality_metrics": list(self.quality_metrics),
+            "esr_mode": self.esr_mode,
             "esr_pre_emphasis": self.esr_pre_emphasis,
             "silence_policy": silence_policy_metadata(),
             "clipping_threshold": self.clipping_threshold,

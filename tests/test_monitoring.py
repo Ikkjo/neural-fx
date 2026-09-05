@@ -20,6 +20,7 @@ from neural_fx.monitoring import (
     MonitoringError,
     load_monitoring_report,
     monitor_artifact,
+    write_monitoring_outputs,
 )
 from neural_fx.monitoring.execution import latency_summary
 from neural_fx.monitoring.schema import (
@@ -82,7 +83,10 @@ def _write_audio(root: Path, sample_rate: int = 48_000) -> tuple[Path, Path]:
 
 
 def _write_model_artifacts(
-    root: Path, *, include_torchscript: bool = False
+    root: Path,
+    *,
+    include_torchscript: bool = False,
+    output_bias: float | None = None,
 ) -> tuple[Path, Path, Path]:
     config_path = root / "config.yaml"
     checkpoint_path = root / "model.ckpt"
@@ -120,6 +124,11 @@ def _write_model_artifacts(
             params=LSTMParams(hidden_size=4, num_layers=1),
         )
     ).eval()
+    if output_bias is not None:
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.zero_()
+            model.fc_out.bias.fill_(output_bias)
     torch.save(model.state_dict(), checkpoint_path)
     if include_torchscript:
         model.export_torchscript(torchscript_path)
@@ -139,12 +148,43 @@ def test_manifest_resolves_paths_and_applies_compatibility_defaults(
     assert case.start_sample == 0
     assert case.num_samples == 4096
     assert manifest.allow_target_full_scale is False
+    assert manifest.esr_mode == "legacy"
+
+
+def test_monitoring_records_and_applies_the_selected_esr_mode(tmp_path: Path) -> None:
+    legacy_path = _write_suite(
+        tmp_path / "legacy",
+        quality_metrics=["esr"],
+        esr_pre_emphasis=0.85,
+        warmup_runs=0,
+        measurement_runs=1,
+    )
+    nam_path = _write_suite(
+        tmp_path / "nam",
+        quality_metrics=["esr"],
+        esr_pre_emphasis=0.85,
+        esr_mode="nam",
+        warmup_runs=0,
+        measurement_runs=1,
+    )
+    _write_audio(tmp_path / "legacy")
+    _write_audio(tmp_path / "nam")
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path / "legacy")
+
+    legacy = monitor_artifact(legacy_path, checkpoint_path, config_path=config_path)
+    nam = monitor_artifact(nam_path, checkpoint_path, config_path=config_path)
+
+    assert legacy.workload["esr_mode"] == "legacy"
+    assert nam.workload["esr_mode"] == "nam"
+    assert legacy.suite["fingerprint"] != nam.suite["fingerprint"]
+    assert legacy.cases[0].metrics["esr"] != nam.cases[0].metrics["esr"]
 
 
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         ("sample_rate", True, "sample_rate must be an integer"),
+        ("esr_mode", "other", "esr_mode must be 'legacy' or 'nam'"),
         ("unexpected", "value", "unknown fields: unexpected"),
     ],
 )
@@ -268,6 +308,7 @@ def test_checkpoint_monitoring_produces_required_measurements(tmp_path: Path) ->
     )
 
     assert report.artifact["type"] == "checkpoint"
+    assert report.artifact["effective_inference_chunk_size"] == 1024
     assert report.artifact["trainable_parameters"] > 0
     assert set(report.cases[0].metrics) == {
         "esr",
@@ -464,6 +505,7 @@ def test_torchscript_uses_the_same_monitoring_interface(tmp_path: Path) -> None:
 
     assert report.artifact["type"] == "torchscript"
     assert report.artifact["inference_category"] == "stateless_sequence"
+    assert report.artifact["effective_inference_chunk_size"] is None
     assert report.cases[0].metrics["mse"] >= 0
 
 
@@ -520,6 +562,33 @@ def test_target_full_scale_fails_without_override(tmp_path: Path) -> None:
     assert error.value.category == "validation"
 
 
+def test_monitoring_warns_about_out_of_range_predictions(tmp_path: Path) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+        quality_metrics=["mse"],
+    )
+    _write_audio(tmp_path)
+    config_path, checkpoint_path, _ = _write_model_artifacts(
+        tmp_path, output_bias=2.0
+    )
+
+    report = monitor_artifact(
+        manifest_path,
+        checkpoint_path,
+        config_path=config_path,
+    )
+
+    failed_warnings = {
+        check.name
+        for check in report.validation
+        if not check.passed and check.severity == "warning"
+    }
+    assert failed_warnings == {"prediction_amplitude", "prediction_clipping"}
+    assert report.suite["validation_warnings"] == 2
+
+
 def _run_monitor_command(arguments: list[str]) -> subprocess.CompletedProcess[str]:
     repo_root = Path(__file__).resolve().parents[1]
     environment = os.environ.copy()
@@ -544,26 +613,35 @@ def test_monitor_command_writes_required_outputs(tmp_path: Path) -> None:
     config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path)
     output_dir = tmp_path / "result"
 
-    result = _run_monitor_command(
-        [
-            "--manifest",
-            str(manifest_path),
-            "--artifact",
-            str(checkpoint_path),
-            "--config",
-            str(config_path),
-            "--output-dir",
-            str(output_dir),
-            "--html",
-        ]
-    )
+    arguments = [
+        "--manifest",
+        str(manifest_path),
+        "--artifact",
+        str(checkpoint_path),
+        "--config",
+        str(config_path),
+        "--output-dir",
+        str(output_dir),
+        "--html",
+    ]
+    result = _run_monitor_command(arguments)
 
     assert result.returncode == 0, result.stderr
     assert json.loads((output_dir / "monitoring.json").read_text())[
         "schema_version"
     ] == "1.1"
     assert (output_dir / "monitoring.csv").is_file()
+    csv_header = (output_dir / "monitoring.csv").read_text().splitlines()[0]
+    assert "inference_category" in csv_header
+    assert "effective_inference_chunk_size" in csv_header
     assert (output_dir / "monitoring.html").is_file()
+
+    blocked = _run_monitor_command(arguments)
+    assert blocked.returncode == 2
+    assert "already exists" in blocked.stderr
+
+    overwritten = _run_monitor_command([*arguments, "--overwrite"])
+    assert overwritten.returncode == 0, overwritten.stderr
 
 
 def test_monitor_command_returns_two_for_expected_failure(tmp_path: Path) -> None:

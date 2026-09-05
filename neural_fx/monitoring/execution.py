@@ -223,6 +223,7 @@ def quality_metrics(
                     prediction,
                     target,
                     pre_emphasis_coeff=manifest.esr_pre_emphasis,
+                    mode=manifest.esr_mode,
                 )
             )
         )
