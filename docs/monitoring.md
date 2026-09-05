@@ -1,6 +1,6 @@
 # Offline monitoring
 
-Offline monitoring checks one checkpoint or TorchScript artifact against a fixed audio suite. It does not monitor a live service.
+Offline monitoring checks one checkpoint or TorchScript artifact against a fixed audio suite.
 
 Use the same suite for each new artifact. The suite fingerprint identifies the workload and complete audio contents.
 
@@ -17,7 +17,7 @@ Edit the case paths and workload settings. Relative paths start from the manifes
 
 Each file must match the declared sample rate and channel count. Monitoring does not resample, mix, normalize, or align audio.
 
-The manifest controls the segment length, burn-in, inference chunks, latency blocks, warm-up runs, measured runs, quality metrics, amplitude limits, and ordered cases.
+The manifest controls the segment length, burn-in, inference chunks, latency blocks, warm-up runs, measured runs, quality metrics, amplitude limits, and ordered cases. Set `esr_mode` and `esr_pre_emphasis` explicitly because both settings change the meaning of the ESR value.
 
 ## Monitor a checkpoint
 
@@ -44,6 +44,8 @@ python scripts/monitor.py \
 
 TorchScript monitoring needs the neural-fx model config. Version 1 supports unconditioned LSTM, GRU, WaveNet, and S4D artifacts.
 
+Use a different output directory for each artifact version. The command refuses to replace an existing report unless `--overwrite` is passed.
+
 ## Outputs
 
 A successful run writes:
@@ -52,13 +54,15 @@ A successful run writes:
 - `monitoring.csv`
 - `monitoring.html` when `--html` is present
 
-The version 1.0 report records:
+The version 1.1 report records:
 
 - Suite and audio fingerprints
 - Artifact and config hashes
 - Runtime and device identity
 - Preflight results and warnings
 - Per-case ESR, MSE, MR-STFT, latency, and real-time factor
+- Digital-silence status, absolute MSE, prediction RMS/peak, and eligible/excluded relative-score counts
+- Prediction peak-amplitude and clipping warnings
 - Aggregate quality, latency, artifact size, parameter count, and supported memory measurements
 
 The suite fingerprint covers workload settings, ordered case slices, and complete audio hashes. Moving the same files does not change it.
@@ -70,5 +74,17 @@ The fixed `digital_silence_v1` policy classifies a post-burn-in case as silent o
 Monitoring and controlled evaluation use the same target-only policy but different workloads: monitoring averages complete post-burn-in cases, while evaluation averages its existing fixed three-second MR-STFT windows and uses one complete segment for ESR/MSE. Training losses and checkpoints are unchanged.
 
 The command returns 0 after success. It returns 2 for expected monitoring errors and 1 for unexpected failures.
+
+## Compare reports
+
+Run monitoring for each new checkpoint or export, then compare its JSON or CSV report with the chosen baseline. A comparison is valid only when:
+
+- `suite.fingerprint` matches;
+- `workload.esr_mode`, `workload.esr_pre_emphasis`, burn-in, segment length, and selected quality metrics match;
+- latency results use the same device, dtype, inference category, and effective chunk size.
+
+Checkpoint inference uses stateful chunks and records the configured `inference_chunk_size` as its effective chunk size. Current TorchScript recurrent and WaveNet exports process the complete sequence in one call because their exported interfaces do not expose streaming state. Their effective chunk size is therefore `null`. Do not compare latency between these two execution methods as if they represented the same deployment workload.
+
+Lower ESR, MSE, MR-STFT distance, latency, real-time factor, memory use, and artifact size are better when every other comparison condition is fixed. Treat a candidate as a regression only when it crosses a threshold chosen before inspecting that candidate. Record both the absolute change and percentage change. Use validation cases while choosing models and reserve fixed test cases for final checks to avoid adapting repeatedly to the test set.
 
 Monitoring reports describe each artifact. They do not apply a baseline regression policy or select a preferred model.
