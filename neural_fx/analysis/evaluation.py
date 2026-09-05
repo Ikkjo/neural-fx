@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,12 +18,24 @@ from ..config import NeuralFXConfig
 from ..data.audio import load_audio_pair
 from ..inference import run_inference
 from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
+from ..metrics import (
+    RELATIVE_METRICS,
+    average_eligible,
+    scoring_diagnostics,
+    silence_policy_metadata,
+)
 from ..preprocessing.latency import LatencyCalibration
 from .benchmarking import load_benchmark_result, load_model_for_evaluation
 
-EVALUATION_SCHEMA_VERSION = "1.0"
-COMPARISON_SCHEMA_VERSION = "1.0"
+EVALUATION_MANIFEST_SCHEMA_VERSION = "1.0"
+EVALUATION_RESULT_SCHEMA_VERSION = "1.1"
+EVALUATION_SCHEMA_VERSION = EVALUATION_RESULT_SCHEMA_VERSION
+COMPARISON_SCHEMA_VERSION = "1.1"
 DEFAULT_INFERENCE_CHUNK_SIZE = 65_536
+
+
+def _format_metric(value: float | None, digits: int) -> str:
+    return "N/A" if value is None else f"{value:.{digits}f}"
 
 
 def _resolve_path(value: str, manifest_path: Path) -> Path:
@@ -38,7 +49,7 @@ def load_experiment_manifest(path: str | Path) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise TypeError("Experiment manifest must contain a mapping")
-    if data.get("schema_version") != EVALUATION_SCHEMA_VERSION:
+    if data.get("schema_version") != EVALUATION_MANIFEST_SCHEMA_VERSION:
         raise ValueError(f"Unsupported manifest schema: {data.get('schema_version')}")
     for key in ("experiment_id", "run_kind", "model", "dataset", "training"):
         if key not in data:
@@ -179,7 +190,7 @@ def _calculate_evaluation_metrics(
     signals: _EvaluationSignals,
     manifest: dict[str, Any],
     config: NeuralFXConfig,
-) -> tuple[dict[str, float], dict[str, Any]]:
+) -> tuple[dict[str, float | None], dict[str, Any]]:
     mask_first = int(
         manifest.get(
             "burn_in_samples",
@@ -199,6 +210,7 @@ def _calculate_evaluation_metrics(
             "Evaluation segment after loss masking must contain 2048 samples"
         )
 
+    complete_diagnostics = scoring_diagnostics(prediction, target)
     pre_emphasis_coeff = manifest.get("esr_pre_emphasis")
     if pre_emphasis_coeff is not None:
         pre_emphasis_coeff = float(pre_emphasis_coeff)
@@ -208,24 +220,50 @@ def _calculate_evaluation_metrics(
         config.sample_rate,
     )
     stft_loss = MultiResolutionSTFTLoss()
-    stft_values = [
-        stft_loss(
-            prediction[..., start : start + stft_window_samples],
-            target[..., start : start + stft_window_samples],
-        ).item()
-        for start in stft_starts
-    ]
+    stft_values: list[float | None] = []
+    stft_windows = []
+    for start in stft_starts:
+        window_prediction = prediction[..., start : start + stft_window_samples]
+        window_target = target[..., start : start + stft_window_samples]
+        diagnostics = scoring_diagnostics(window_prediction, window_target)
+        value = (
+            None
+            if diagnostics["digital_silence"]
+            else float(stft_loss(window_prediction, window_target).item())
+        )
+        stft_values.append(value)
+        stft_windows.append(
+            {
+                "start_sample": start,
+                "num_samples": stft_window_samples,
+                "multi_resolution_stft_distance": value,
+                **diagnostics,
+            }
+        )
+    stft_mean, stft_scored_count, stft_excluded_count = average_eligible(stft_values)
+    esr = (
+        None
+        if complete_diagnostics["digital_silence"]
+        else float(
+            ESR(
+                prediction,
+                target,
+                pre_emphasis_coeff=pre_emphasis_coeff,
+                mode=esr_mode,
+            ).item()
+        )
+    )
     metrics = {
-        "esr": ESR(
-            prediction,
-            target,
-            pre_emphasis_coeff=pre_emphasis_coeff,
-            mode=esr_mode,
-        ).item(),
-        "mse": torch.mean((prediction - target) ** 2).item(),
+        "esr": esr,
+        "mse": complete_diagnostics["mse"],
         "correlation": _safe_correlation(prediction, target),
-        "multi_resolution_stft_distance": statistics.fmean(stft_values),
+        "multi_resolution_stft_distance": stft_mean,
     }
+    if any(
+        value is not None and not math.isfinite(float(value))
+        for value in metrics.values()
+    ):
+        raise ValueError("Evaluation produced a non-finite metric")
     recipe = {
         "mask_first": mask_first,
         "esr_mode": esr_mode,
@@ -235,6 +273,11 @@ def _calculate_evaluation_metrics(
         "stft_window_starts": stft_starts,
         "stft_window_samples": stft_window_samples,
         "stft_window_values": stft_values,
+        "stft_windows": stft_windows,
+        "stft_scored_count": stft_scored_count,
+        "stft_excluded_count": stft_excluded_count,
+        "scoring_diagnostics": complete_diagnostics,
+        "silence_policy": silence_policy_metadata(),
     }
     return metrics, recipe
 
@@ -350,7 +393,7 @@ def evaluate_experiment(
     )
 
     return {
-        "schema_version": EVALUATION_SCHEMA_VERSION,
+        "schema_version": EVALUATION_RESULT_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "experiment_id": manifest["experiment_id"],
         "run_kind": manifest["run_kind"],
@@ -405,19 +448,29 @@ def write_evaluation_result(result: dict[str, Any], path: str | Path) -> None:
     """Write a checkpoint evaluation result."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, indent=2) + "\n")
+    path.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
 
 
 def load_evaluation_result(path: str | Path) -> dict[str, Any]:
     """Load and minimally validate an evaluation result."""
     result = json.loads(Path(path).read_text())
-    if result.get("schema_version") != EVALUATION_SCHEMA_VERSION:
+    if result.get("schema_version") != EVALUATION_RESULT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported evaluation schema: {result.get('schema_version')}"
         )
     for key in ("experiment_id", "run_kind", "sources", "model", "metrics"):
         if key not in result:
             raise ValueError(f"Evaluation result is missing '{key}'")
+    for name, value in result["metrics"].items():
+        if value is None:
+            if name not in RELATIVE_METRICS:
+                raise ValueError(f"Evaluation metric '{name}' cannot be null")
+        elif (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"Evaluation metric '{name}' must be finite or null")
     return result
 
 
@@ -473,12 +526,25 @@ def build_comparison_report(
         "metric_samples",
         "esr_mode",
         "esr_pre_emphasis",
+        "silence_policy",
+        "stft_window_starts",
+        "stft_window_samples",
     )
     for result in results:
         dataset = result.get("dataset", {})
         if "esr_mode" not in dataset or "esr_pre_emphasis" not in dataset:
             raise ValueError(
                 "Evaluation results must record esr_mode and esr_pre_emphasis before comparison"
+            )
+        if "silence_policy" not in dataset:
+            raise ValueError(
+                "Evaluation results must record the silence policy before comparison"
+            )
+        if dataset["silence_policy"] != silence_policy_metadata():
+            raise ValueError("Evaluation results must use the same silence policy")
+        if "stft_window_starts" not in dataset or "stft_window_samples" not in dataset:
+            raise ValueError(
+                "Evaluation results must record the STFT window recipe before comparison"
             )
     expected_dataset = {
         key: results[0].get("dataset", {}).get(key) for key in dataset_keys
@@ -510,6 +576,13 @@ def build_comparison_report(
                 "run_kind": result["run_kind"],
                 "model": result["model"],
                 "metrics": result["metrics"],
+                "diagnostics": result.get("dataset", {}).get("scoring_diagnostics"),
+                "stft_scored_count": result.get("dataset", {}).get(
+                    "stft_scored_count"
+                ),
+                "stft_excluded_count": result.get("dataset", {}).get(
+                    "stft_excluded_count"
+                ),
                 "checkpoint": result.get("checkpoint"),
                 "offline_real_time_factor": offline.get("real_time_factor"),
                 "block_128_p95_ms": block_128.get("p95_ms") if block_128 else None,
@@ -517,9 +590,21 @@ def build_comparison_report(
                 "listening_samples": result.get("artifacts", {}),
             }
         )
-    rows.sort(key=lambda row: row["metrics"]["esr"])
-    for rank, row in enumerate(rows, start=1):
-        row["esr_rank"] = rank
+    rows.sort(
+        key=lambda row: (
+            row["metrics"]["esr"] is None,
+            row["metrics"]["esr"]
+            if row["metrics"]["esr"] is not None
+            else math.inf,
+        )
+    )
+    rank = 1
+    for row in rows:
+        if row["metrics"]["esr"] is None:
+            row["esr_rank"] = None
+        else:
+            row["esr_rank"] = rank
+            rank += 1
     report = {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -538,14 +623,15 @@ def build_comparison_report(
                 "multi_resolution_stft_distance",
             ],
         },
+        "silence_policy": silence_policy_metadata(),
         "size_groups": groups,
         "results": rows,
     }
 
     header = (
         "| ESR rank | Experiment | Size group | Kind | Type | Parameters | ESR | MSE | "
-        "MR-STFT | Correlation | Offline RTF | 128 p95 ms | Inputs | Samples |\n"
-        "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
+        "MR-STFT | STFT scored/excluded | Correlation | Offline RTF | 128 p95 ms | Inputs | Samples |\n"
+        "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
     )
     lines = [header]
     for row in rows:
@@ -558,7 +644,7 @@ def build_comparison_report(
         source_links = (
             f"[manifest]({sources['manifest']}), {config_link}, "
             f"[checkpoint]({sources['checkpoint']})"
-        )
+        ) if sources.get("manifest") and sources.get("checkpoint") else "—"
         samples = row["listening_samples"]
         sample_links = (
             f"[input]({samples['input_audio']}), [target]({samples['target_audio']}), "
@@ -567,19 +653,27 @@ def build_comparison_report(
             else "—"
         )
         metrics = row["metrics"]
+        stft_counts = (
+            f"{row['stft_scored_count']}/{row['stft_excluded_count']}"
+            if row["stft_scored_count"] is not None
+            and row["stft_excluded_count"] is not None
+            else "—"
+        )
+
         lines.append(
             "| {esr_rank} | {experiment_id} | {size_group} | {run_kind} | {model_type} | "
-            "{parameters:,} | {esr:.6f} | {mse:.6f} | {stft:.6f} | "
+            "{parameters:,} | {esr} | {mse} | {stft} | {stft_counts} | "
             "{correlation:.4f} | {rtf} | {p95} | {sources} | {samples} |".format(
-                esr_rank=row["esr_rank"],
+                esr_rank=(row["esr_rank"] if row["esr_rank"] is not None else "—"),
                 experiment_id=row["experiment_id"],
                 size_group=row["size_group"],
                 run_kind=row["run_kind"],
-                model_type=row["model"]["type"],
+                model_type=row["model"].get("type", "unknown"),
                 parameters=row["model"]["trainable_parameters"],
-                esr=metrics["esr"],
-                mse=metrics["mse"],
-                stft=metrics["multi_resolution_stft_distance"],
+                esr=_format_metric(metrics["esr"], 6),
+                mse=_format_metric(metrics["mse"], 6),
+                stft=_format_metric(metrics["multi_resolution_stft_distance"], 6),
+                stft_counts=stft_counts,
                 correlation=metrics["correlation"],
                 rtf=(
                     f"{row['offline_real_time_factor']:.4f}"

@@ -63,6 +63,12 @@ The version 1.0 report records:
 
 The suite fingerprint covers workload settings, ordered case slices, and complete audio hashes. Moving the same files does not change it.
 
+### Digital silence policy
+
+The fixed `digital_silence_v1` policy classifies a post-burn-in case as silent only when every target sample is exactly zero. ESR and MR-STFT are stored as JSON `null` for silent cases and excluded from their aggregate means; if no case is eligible, the aggregate is also `null`. MSE, prediction RMS, and prediction absolute peak remain finite diagnostics. CSV leaves unavailable relative values blank and includes status/count fields; HTML renders them as `N/A`.
+
+Monitoring and controlled evaluation use the same target-only policy but different workloads: monitoring averages complete post-burn-in cases, while evaluation averages its existing fixed three-second MR-STFT windows and uses one complete segment for ESR/MSE. Training losses and checkpoints are unchanged.
+
 The command returns 0 after success. It returns 2 for expected monitoring errors and 1 for unexpected failures.
 
 Monitoring reports describe each artifact. They do not apply a baseline regression policy or select a preferred model.

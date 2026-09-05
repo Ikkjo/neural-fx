@@ -14,6 +14,7 @@ import torchaudio
 import yaml
 
 from neural_fx.config import LSTMParams, ModelConfig
+from neural_fx.metrics import silence_policy_metadata
 from neural_fx.models.recurrent import NeuralfxGRU
 from neural_fx.monitoring import (
     MonitoringError,
@@ -194,12 +195,15 @@ def test_report_loader_preserves_the_established_version_one_shape(
     tmp_path: Path,
 ) -> None:
     data = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "created_at": "2026-08-26T10:00:00+00:00",
         "suite": {"id": "fixed-suite", "fingerprint": "suite-hash"},
         "artifact": {"type": "checkpoint", "sha256": "artifact-hash"},
         "runtime": {"device": "cpu"},
-        "workload": {"sample_rate": 48_000},
+        "workload": {
+            "sample_rate": 48_000,
+            "silence_policy": silence_policy_metadata(),
+        },
         "validation": [
             {
                 "case_id": "case-a",
@@ -216,12 +220,22 @@ def test_report_loader_preserves_the_established_version_one_shape(
                 "input_sha256": "input-hash",
                 "target_sha256": "target-hash",
                 "evaluated_samples": 4096,
-                "metric_samples": 4032,
+                    "metric_samples": 4032,
+                    "metrics": {"mse": 0.1},
+                    "diagnostics": {
+                        "digital_silence": False,
+                        "relative_score_status": "eligible",
+                        "mse": 0.1,
+                        "prediction_rms": 0.1,
+                        "prediction_abs_peak": 0.2,
+                    },
+                    "latency": {"full": {"p50_latency_ms": 1.0}},
+                }
+            ],
+            "aggregate": {
                 "metrics": {"mse": 0.1},
-                "latency": {"full": {"p50_latency_ms": 1.0}},
-            }
-        ],
-        "aggregate": {"metrics": {"mse": 0.1}},
+                "quality": {"mse": 0.1},
+            },
         "ignored_additive_field": "old loader compatibility",
     }
     report_path = tmp_path / "monitoring.json"
@@ -229,7 +243,7 @@ def test_report_loader_preserves_the_established_version_one_shape(
 
     report = load_monitoring_report(report_path)
 
-    assert report.schema_version == "1.0"
+    assert report.schema_version == "1.1"
     assert report.cases[0].metrics == {"mse": 0.1}
     assert "ignored_additive_field" not in report.to_dict()
 
@@ -265,6 +279,141 @@ def test_checkpoint_monitoring_produces_required_measurements(tmp_path: Path) ->
     assert report.suite["validation_passed"] is True
 
 
+def test_silent_monitoring_keeps_absolute_diagnostics_and_nulls_relative_scores(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+    )
+    _write_audio(tmp_path)
+    _, target_path = _write_audio(tmp_path)
+    torchaudio.save(target_path, torch.zeros(1, 4096), 48_000)
+    config_path, checkpoint_path, _ = _write_model_artifacts(
+        tmp_path, output_bias=0.001
+    )
+
+    report = monitor_artifact(
+        manifest_path,
+        checkpoint_path,
+        config_path=config_path,
+    )
+    case = report.cases[0]
+
+    assert case.metrics["esr"] is None
+    assert case.metrics["multi_resolution_stft_distance"] is None
+    assert case.metrics["mse"] == pytest.approx(1e-6)
+    assert case.diagnostics == {
+        "digital_silence": True,
+        "relative_score_status": "excluded",
+        "mse": pytest.approx(1e-6),
+        "prediction_rms": pytest.approx(0.001),
+        "prediction_abs_peak": pytest.approx(0.001),
+    }
+    assert report.aggregate["metrics"]["esr"] is None
+    assert report.aggregate["metrics"]["multi_resolution_stft_distance"] is None
+    assert report.aggregate["relative_score_counts"] == {
+        "esr": {"eligible": 0, "excluded": 1},
+        "multi_resolution_stft_distance": {"eligible": 0, "excluded": 1},
+    }
+    assert report.aggregate["silent_case_count"] == 1
+
+    paths = write_monitoring_outputs(report, tmp_path / "report", include_html=True)
+    rows = (paths["csv"]).read_text().splitlines()
+    assert any(",excluded,True," in row for row in rows)
+    assert "N/A" in paths["html"].read_text()
+    assert load_monitoring_report(paths["json"]).cases[0].metrics["esr"] is None
+
+
+def test_quiet_nonzero_target_remains_eligible(tmp_path: Path) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+    )
+    _write_audio(tmp_path)
+    _, target_path = _write_audio(tmp_path)
+    target = torch.zeros(1, 4096)
+    target[0, 2048] = 0.001
+    torchaudio.save(target_path, target, 48_000)
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path, output_bias=0.0)
+
+    report = monitor_artifact(
+        manifest_path,
+        checkpoint_path,
+        config_path=config_path,
+    )
+
+    assert report.cases[0].diagnostics["digital_silence"] is False
+    assert report.cases[0].metrics["esr"] is not None
+    assert report.cases[0].metrics["multi_resolution_stft_distance"] is not None
+    assert report.aggregate["relative_score_counts"]["esr"] == {
+        "eligible": 1,
+        "excluded": 0,
+    }
+
+
+def test_mixed_monitoring_cases_average_only_eligible_relative_scores(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _write_suite(
+        tmp_path,
+        warmup_runs=0,
+        measurement_runs=1,
+        cases=[
+            {
+                "id": "nonzero",
+                "input": "audio/input.wav",
+                "target": "audio/target.wav",
+                "start_sample": 0,
+                "num_samples": 4096,
+            },
+            {
+                "id": "silent",
+                "input": "audio/input.wav",
+                "target": "audio/target.wav",
+                "start_sample": 4096,
+                "num_samples": 4096,
+            },
+        ],
+    )
+    _write_audio(tmp_path)
+    input_audio, _ = torchaudio.load(tmp_path / "audio" / "input.wav")
+    target_audio, _ = torchaudio.load(tmp_path / "audio" / "target.wav")
+    torchaudio.save(
+        tmp_path / "audio" / "input.wav",
+        torch.cat((input_audio, input_audio), dim=-1),
+        48_000,
+    )
+    torchaudio.save(
+        tmp_path / "audio" / "target.wav",
+        torch.cat((target_audio, torch.zeros_like(target_audio)), dim=-1),
+        48_000,
+    )
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path, output_bias=0.0)
+
+    report = monitor_artifact(
+        manifest_path,
+        checkpoint_path,
+        config_path=config_path,
+    )
+
+    nonzero, silent = report.cases
+    assert nonzero.diagnostics["digital_silence"] is False
+    assert silent.diagnostics["digital_silence"] is True
+    assert report.aggregate["relative_score_counts"]["esr"] == {
+        "eligible": 1,
+        "excluded": 1,
+    }
+    assert report.aggregate["quality"]["esr"] == pytest.approx(
+        nonzero.metrics["esr"]
+    )
+    assert report.aggregate["quality"]["multi_resolution_stft_distance"] == pytest.approx(
+        nonzero.metrics["multi_resolution_stft_distance"]
+    )
+
+
 def test_monitoring_marks_process_memory_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -286,6 +435,17 @@ def test_monitoring_marks_process_memory_unavailable(
 
     assert report.aggregate["metrics"]["peak_memory_bytes"] is None
     assert report.aggregate["memory"]["kind"] == "unavailable"
+
+    paths = write_monitoring_outputs(
+        report, tmp_path / "result", include_html=True
+    )
+    assert "N/A" in paths["html"].read_text()
+    assert (
+        load_monitoring_report(paths["json"]).aggregate["metrics"][
+            "peak_memory_bytes"
+        ]
+        is None
+    )
 
 
 def test_torchscript_uses_the_same_monitoring_interface(tmp_path: Path) -> None:
@@ -401,7 +561,7 @@ def test_monitor_command_writes_required_outputs(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert json.loads((output_dir / "monitoring.json").read_text())[
         "schema_version"
-    ] == "1.0"
+    ] == "1.1"
     assert (output_dir / "monitoring.csv").is_file()
     assert (output_dir / "monitoring.html").is_file()
 

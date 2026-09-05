@@ -9,13 +9,22 @@ import yaml
 from scipy.io import wavfile
 
 from neural_fx.analysis.evaluation import (
+    _calculate_evaluation_metrics,
+    _EvaluationSignals,
     build_comparison_report,
     evaluate_experiment,
     load_experiment_manifest,
     run_chunked_inference,
     write_evaluation_result,
 )
-from neural_fx.config import LSTMParams, ModelConfig, SSMParams, WaveNetParams
+from neural_fx.config import (
+    LSTMParams,
+    ModelConfig,
+    SSMParams,
+    WaveNetParams,
+    load_config,
+)
+from neural_fx.metrics import silence_policy_metadata
 from neural_fx.models import create_model_from_config
 from neural_fx.models.recurrent import NeuralfxGRU
 
@@ -193,9 +202,12 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,
-                "esr_mode": "nam",
-                "esr_pre_emphasis": None,
-            },
+                    "esr_mode": "nam",
+                    "esr_pre_emphasis": None,
+                    "silence_policy": silence_policy_metadata(),
+                    "stft_window_starts": [0],
+                    "stft_window_samples": 4096,
+                },
             "performance": None,
         }
 
@@ -249,9 +261,12 @@ def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,
-                "esr_mode": "nam",
-                "esr_pre_emphasis": None,
-            },
+                    "esr_mode": "nam",
+                    "esr_pre_emphasis": None,
+                    "silence_policy": silence_policy_metadata(),
+                    "stft_window_starts": [0],
+                    "stft_window_samples": 4096,
+                },
         }
 
     first, second = result("first"), result("second")
@@ -271,6 +286,89 @@ def test_comparison_report_requires_esr_recipe() -> None:
     }
     with pytest.raises(ValueError, match="must record esr_mode and esr_pre_emphasis"):
         build_comparison_report([result])
+
+
+def test_comparison_report_does_not_rank_unavailable_esr() -> None:
+    def result(experiment: str, esr: float | None) -> dict:
+        return {
+            "experiment_id": experiment,
+            "run_kind": "final",
+            "sources": {},
+            "model": {"trainable_parameters": 1},
+            "metrics": {
+                "esr": esr,
+                "mse": 0.0,
+                "correlation": 0.0,
+                "multi_resolution_stft_distance": None,
+            },
+            "dataset": {
+                "input_audio": "/input.wav",
+                "target_audio": "/target.wav",
+                "split": "test",
+                "start_sample": 0,
+                "evaluated_samples": 4096,
+                "sample_rate": 48_000,
+                "latency_samples": 0,
+                "preparation_delay_samples": 0,
+                "normalization": "none",
+                "mask_first": 0,
+                "metric_samples": 4096,
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+                "silence_policy": silence_policy_metadata(),
+                "stft_window_starts": [0],
+                "stft_window_samples": 4096,
+            },
+        }
+
+    report, markdown = build_comparison_report(
+        [result("silent", None), result("eligible", 0.5)]
+    )
+
+    rows = {row["experiment_id"]: row for row in report["results"]}
+    assert rows["eligible"]["esr_rank"] == 1
+    assert rows["silent"]["esr_rank"] is None
+    assert "N/A" in markdown
+
+
+def test_evaluation_excludes_silent_stft_window_and_keeps_diagnostics(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_test_config(config_path)
+
+    config = load_config(config_path)
+    target = torch.zeros(1, 1, 4096)
+    prediction = torch.full_like(target, 0.001)
+    signals = _EvaluationSignals(
+        input_audio=torch.zeros_like(target),
+        target_audio=target,
+        prediction=prediction,
+        chunk_size=1024,
+    )
+
+    metrics, recipe = _calculate_evaluation_metrics(
+        signals,
+        {
+            "dataset": {},
+            "burn_in_samples": 0,
+            "esr_mode": "nam",
+            "esr_pre_emphasis": None,
+        },
+        config,
+    )
+
+    assert metrics["esr"] is None
+    assert metrics["multi_resolution_stft_distance"] is None
+    assert metrics["mse"] == pytest.approx(1e-6)
+    assert recipe["stft_scored_count"] == 0
+    assert recipe["stft_excluded_count"] == 1
+    assert recipe["stft_window_values"] == [None]
+    assert recipe["scoring_diagnostics"] == {
+        "digital_silence": True,
+        "relative_score_status": "excluded",
+        "mse": pytest.approx(1e-6),
+        "prediction_rms": pytest.approx(0.001),
+        "prediction_abs_peak": pytest.approx(0.001),
+    }
 
 
 @pytest.mark.parametrize(

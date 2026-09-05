@@ -32,6 +32,12 @@ Quality metrics include ESR, MSE, correlation, and multi-resolution STFT distanc
 
 MR-STFT uses up to ten fixed, uniformly placed, non-overlapping three-second windows. The report records each window start and value.
 
+### Digital silence policy
+
+Evaluation results use `digital_silence_v1`. A scoring segment is digital silence only when every target sample is exactly zero; quiet nonzero targets remain eligible. ESR and MR-STFT are unavailable for silent targets, so JSON stores `null`, Markdown renders `N/A`, and averages use eligible windows only. MSE, prediction RMS, and prediction absolute peak remain recorded for every segment. The complete post-burn-in segment is used for ESR and MSE; the fixed MR-STFT windows are unchanged and each window records its status, absolute diagnostics, and scored/excluded counts.
+
+The evaluation result schema is `1.1`; input manifests remain schema `1.0`. Comparisons reject missing or mismatched silence/STFT recipes, and unavailable ESR values receive no rank.
+
 The metric mask uses this precedence:
 
 1. Manifest `burn_in_samples`

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
-import statistics
 import subprocess
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -18,6 +17,7 @@ from torch import Tensor
 
 from ..data.audio import load_audio_pair
 from ..losses.audio_losses import MultiResolutionSTFTLoss
+from ..metrics import RELATIVE_METRICS, average_eligible, silence_policy_metadata
 from .execution import (
     latency_summary,
     load_artifact,
@@ -253,7 +253,7 @@ def monitor_artifact(
                     f"Case '{case.case_id}' prediction contains NaN or Inf",
                     category="execution",
                 )
-            metrics = quality_metrics(
+            metrics, diagnostics = quality_metrics(
                 prediction, target_batch, manifest, stft_loss
             )
             full_latency = measure_latency(
@@ -283,6 +283,7 @@ def monitor_artifact(
                         manifest.segment_length - manifest.burn_in_samples
                     ),
                     metrics=metrics,
+                    diagnostics=diagnostics,
                     latency=latency,
                 )
             )
@@ -291,10 +292,18 @@ def monitor_artifact(
     except (RuntimeError, TypeError, ValueError) as exc:
         raise MonitoringError(str(exc), category="execution") from exc
 
-    aggregate_quality = {
-        metric: statistics.fmean(case.metrics[metric] for case in case_results)
-        for metric in manifest.quality_metrics
-    }
+    aggregate_quality = {}
+    relative_score_counts = {}
+    for metric in manifest.quality_metrics:
+        value, eligible_count, excluded_count = average_eligible(
+            [case.metrics[metric] for case in case_results]
+        )
+        aggregate_quality[metric] = value
+        if metric in RELATIVE_METRICS:
+            relative_score_counts[metric] = {
+                "eligible": eligible_count,
+                "excluded": excluded_count,
+            }
     full_latency = latency_summary(
         aggregate_measurements, manifest.segment_length, manifest.sample_rate
     )
@@ -333,6 +342,7 @@ def monitor_artifact(
         suite={
             "id": manifest.suite_id,
             "fingerprint": suite_fingerprint,
+            "silence_policy": silence_policy_metadata(),
             "manifest_path": str(manifest.manifest_path),
             "manifest_sha256": sha256_file(manifest.manifest_path),
             "cases": case_hashes,
@@ -371,6 +381,10 @@ def monitor_artifact(
         aggregate={
             "metrics": comparison_metrics,
             "quality": aggregate_quality,
+            "relative_score_counts": relative_score_counts,
+            "silent_case_count": sum(
+                case.diagnostics["digital_silence"] for case in case_results
+            ),
             "full_latency": full_latency,
             "memory": {
                 "peak_memory_bytes": peak_memory,
