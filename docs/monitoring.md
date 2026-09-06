@@ -88,3 +88,32 @@ Checkpoint inference uses stateful chunks and records the configured `inference_
 Lower ESR, MSE, MR-STFT distance, latency, real-time factor, memory use, and artifact size are better when every other comparison condition is fixed. Treat a candidate as a regression only when it crosses a threshold chosen before inspecting that candidate. Record both the absolute change and percentage change. Use validation cases while choosing models and reserve fixed test cases for final checks to avoid adapting repeatedly to the test set.
 
 Monitoring reports describe each artifact. They do not apply a baseline regression policy or select a preferred model.
+
+## Compare artifact versions
+
+TAMU's offline version-monitoring example compares two reports from the same fixed validation suite against a declared policy:
+
+```bash
+python scripts/monitor.py \
+  --manifest configs/monitoring/tamu-ds1-gain-75-validation.yaml \
+  --artifact local/gear_comparison_44100/checkpoints/gear_comparison_44100_ds1_gain_75_lstm_7k_seed42/best.ckpt \
+  --output-dir local/tamu_monitoring/baseline
+
+python scripts/monitor.py \
+  --manifest configs/monitoring/tamu-ds1-gain-75-validation.yaml \
+  --artifact local/issue4/checkpoints/issue4_ds1_gain_75_lstm_nano_seed42/best.ckpt \
+  --output-dir local/tamu_monitoring/candidate
+
+python scripts/compare_monitoring.py \
+  --baseline-report local/tamu_monitoring/baseline/monitoring.json \
+  --candidate-report local/tamu_monitoring/candidate/monitoring.json \
+  --policy configs/monitoring/tamu-artifact-policy.yaml \
+  --scenario controlled_rollback_failure \
+  --output-dir local/tamu_monitoring/comparison
+```
+
+The policy rejects invalid or incomparable reports, output-contract failures, and ESR or MR-STFT increases above 10%. It investigates MSE or artifact-size increases above 10%, and p95 latency, real-time factor, or process peak RSS increases above 20%. Equality does not cross a threshold. Results retain raw values, absolute deltas, and relative deltas; the relative delta is unavailable when its baseline is zero or unavailable.
+
+The example is a controlled rollback failure: it compares the accepted DS-1 LSTM-40 checkpoint with a preserved older LSTM-nano artifact. They are both LSTM-family artifacts, but differ in capacity and training/preparation recipe. Do not attribute a regression to a single difference. On rejection, retain the accepted baseline, do not promote the candidate, inspect the recorded version/config differences, correct the candidate, and rerun the same suite.
+
+This is offline fixed-suite artifact monitoring, not production drift detection. Process RSS is whole-process high-water memory, checkpoint size can include training state, and latency is comparable only for matching runtime identity, inference category, chunk size, and workload.

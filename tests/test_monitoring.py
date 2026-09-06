@@ -18,10 +18,12 @@ from neural_fx.metrics import silence_policy_metadata
 from neural_fx.models.recurrent import NeuralfxGRU
 from neural_fx.monitoring import (
     MonitoringError,
+    load_comparison_policy,
     load_monitoring_report,
     monitor_artifact,
     write_monitoring_outputs,
 )
+from neural_fx.monitoring.comparison import build_monitoring_comparison
 from neural_fx.monitoring.execution import latency_summary
 from neural_fx.monitoring.schema import (
     fingerprint_monitoring_suite,
@@ -111,9 +113,7 @@ def _write_model_artifacts(
                 "optimizer": {"type": "adam", "lr": 0.001},
                 "lr_scheduler": {"type": "exponential", "gamma": 0.99},
                 "loss": {"type": "mse", "mask_first": 64},
-                "data": {
-                    "train": {"input": "unused.wav", "target": "unused.wav"}
-                },
+                "data": {"train": {"input": "unused.wav", "target": "unused.wav"}},
                 "latency": {"calibration_duration_seconds": 0},
             }
         )
@@ -260,22 +260,22 @@ def test_report_loader_preserves_the_established_version_one_shape(
                 "input_sha256": "input-hash",
                 "target_sha256": "target-hash",
                 "evaluated_samples": 4096,
-                    "metric_samples": 4032,
-                    "metrics": {"mse": 0.1},
-                    "diagnostics": {
-                        "digital_silence": False,
-                        "relative_score_status": "eligible",
-                        "mse": 0.1,
-                        "prediction_rms": 0.1,
-                        "prediction_abs_peak": 0.2,
-                    },
-                    "latency": {"full": {"p50_latency_ms": 1.0}},
-                }
-            ],
-            "aggregate": {
+                "metric_samples": 4032,
                 "metrics": {"mse": 0.1},
-                "quality": {"mse": 0.1},
-            },
+                "diagnostics": {
+                    "digital_silence": False,
+                    "relative_score_status": "eligible",
+                    "mse": 0.1,
+                    "prediction_rms": 0.1,
+                    "prediction_abs_peak": 0.2,
+                },
+                "latency": {"full": {"p50_latency_ms": 1.0}},
+            }
+        ],
+        "aggregate": {
+            "metrics": {"mse": 0.1},
+            "quality": {"mse": 0.1},
+        },
         "ignored_additive_field": "old loader compatibility",
     }
     report_path = tmp_path / "monitoring.json"
@@ -447,12 +447,10 @@ def test_mixed_monitoring_cases_average_only_eligible_relative_scores(
         "eligible": 1,
         "excluded": 1,
     }
-    assert report.aggregate["quality"]["esr"] == pytest.approx(
-        nonzero.metrics["esr"]
-    )
-    assert report.aggregate["quality"]["multi_resolution_stft_distance"] == pytest.approx(
-        nonzero.metrics["multi_resolution_stft_distance"]
-    )
+    assert report.aggregate["quality"]["esr"] == pytest.approx(nonzero.metrics["esr"])
+    assert report.aggregate["quality"][
+        "multi_resolution_stft_distance"
+    ] == pytest.approx(nonzero.metrics["multi_resolution_stft_distance"])
 
 
 def test_monitoring_marks_process_memory_unavailable(
@@ -477,14 +475,10 @@ def test_monitoring_marks_process_memory_unavailable(
     assert report.aggregate["metrics"]["peak_memory_bytes"] is None
     assert report.aggregate["memory"]["kind"] == "unavailable"
 
-    paths = write_monitoring_outputs(
-        report, tmp_path / "result", include_html=True
-    )
+    paths = write_monitoring_outputs(report, tmp_path / "result", include_html=True)
     assert "N/A" in paths["html"].read_text()
     assert (
-        load_monitoring_report(paths["json"]).aggregate["metrics"][
-            "peak_memory_bytes"
-        ]
+        load_monitoring_report(paths["json"]).aggregate["metrics"]["peak_memory_bytes"]
         is None
     )
 
@@ -570,9 +564,7 @@ def test_monitoring_warns_about_out_of_range_predictions(tmp_path: Path) -> None
         quality_metrics=["mse"],
     )
     _write_audio(tmp_path)
-    config_path, checkpoint_path, _ = _write_model_artifacts(
-        tmp_path, output_bias=2.0
-    )
+    config_path, checkpoint_path, _ = _write_model_artifacts(tmp_path, output_bias=2.0)
 
     report = monitor_artifact(
         manifest_path,
@@ -595,6 +587,25 @@ def _run_monitor_command(arguments: list[str]) -> subprocess.CompletedProcess[st
     environment["PYTHONPATH"] = str(repo_root)
     return subprocess.run(
         [sys.executable, str(repo_root / "scripts" / "monitor.py"), *arguments],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+
+def _run_compare_monitor_command(
+    arguments: list[str],
+) -> subprocess.CompletedProcess[str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(repo_root)
+    return subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts" / "compare_monitoring.py"),
+            *arguments,
+        ],
         capture_output=True,
         check=False,
         env=environment,
@@ -627,9 +638,10 @@ def test_monitor_command_writes_required_outputs(tmp_path: Path) -> None:
     result = _run_monitor_command(arguments)
 
     assert result.returncode == 0, result.stderr
-    assert json.loads((output_dir / "monitoring.json").read_text())[
-        "schema_version"
-    ] == "1.1"
+    assert (
+        json.loads((output_dir / "monitoring.json").read_text())["schema_version"]
+        == "1.1"
+    )
     assert (output_dir / "monitoring.csv").is_file()
     csv_header = (output_dir / "monitoring.csv").read_text().splitlines()[0]
     assert "inference_category" in csv_header
@@ -666,3 +678,242 @@ def test_monitor_command_returns_two_for_expected_failure(tmp_path: Path) -> Non
     assert result.returncode == 2
     assert "Expected 48000 Hz" in result.stderr
     assert not output_dir.exists()
+
+
+def _comparison_report(**overrides: object) -> dict[str, object]:
+    data: dict[str, object] = {
+        "schema_version": "1.1",
+        "created_at": "2026-09-06T00:00:00+00:00",
+        "suite": {
+            "id": "suite",
+            "fingerprint": "fingerprint",
+            "validation_passed": True,
+        },
+        "artifact": {
+            "path": "artifact.ckpt",
+            "sha256": "artifact-hash",
+            "config_path": "config.yaml",
+            "config_sha256": "config-hash",
+            "model_name": "model",
+            "model_type": "lstm",
+            "type": "checkpoint",
+            "inference_category": "native_stateful",
+            "effective_inference_chunk_size": 8192,
+        },
+        "runtime": {"device_class": "cpu", "device_name": "CPU", "dtype": "float32"},
+        "workload": {
+            "silence_policy": silence_policy_metadata(),
+            "esr_mode": "nam",
+            "esr_pre_emphasis": None,
+            "sample_rate": 44100,
+            "burn_in_samples": 4096,
+            "segment_length": 44100,
+            "quality_metrics": ["esr", "mse", "multi_resolution_stft_distance"],
+            "case_ids": ["case"],
+            "latency_block_sizes": [64, 128, 256, 512],
+            "warmup_runs": 3,
+            "measurement_runs": 20,
+        },
+        "validation": [],
+        "cases": [
+            {
+                "case_id": "case",
+                "input_sha256": "input",
+                "target_sha256": "target",
+                "evaluated_samples": 44100,
+                "metric_samples": 40004,
+                "metrics": {"mse": 1.0},
+                "diagnostics": {
+                    "digital_silence": False,
+                    "relative_score_status": "eligible",
+                    "mse": 1.0,
+                    "prediction_rms": 0.1,
+                    "prediction_abs_peak": 0.2,
+                },
+                "latency": {"full": {}},
+            }
+        ],
+        "aggregate": {
+            "metrics": {
+                "esr": 1.0,
+                "mse": 1.0,
+                "multi_resolution_stft_distance": 1.0,
+                "p95_latency_ms": 1.0,
+                "real_time_factor": 1.0,
+                "peak_memory_bytes": 100.0,
+                "artifact_size_bytes": 100.0,
+            },
+            "quality": {"esr": 1.0, "mse": 1.0, "multi_resolution_stft_distance": 1.0},
+        },
+    }
+    data.update(overrides)
+    return data
+
+
+def _comparison_policy_path(root: Path, **overrides: object) -> Path:
+    data: dict[str, object] = {
+        "schema_version": "1.0",
+        "policy_id": "policy",
+        "reject_thresholds": {"esr": 0.1, "multi_resolution_stft_distance": 0.1},
+        "investigate_thresholds": {
+            "mse": 0.1,
+            "p95_latency_ms": 0.2,
+            "real_time_factor": 0.2,
+            "peak_memory_bytes": 0.2,
+            "artifact_size_bytes": 0.1,
+        },
+        "response": "Keep the baseline.",
+    }
+    data.update(overrides)
+    path = root / "policy.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ({"unexpected": True}, "unknown fields: unexpected"),
+        (
+            {"reject_thresholds": {"esr": -1, "multi_resolution_stft_distance": 0.1}},
+            "finite and non-negative",
+        ),
+        (
+            {
+                "investigate_thresholds": {
+                    "mse": float("inf"),
+                    "p95_latency_ms": 0.2,
+                    "real_time_factor": 0.2,
+                    "peak_memory_bytes": 0.2,
+                    "artifact_size_bytes": 0.1,
+                }
+            },
+            "finite and non-negative",
+        ),
+    ],
+)
+def test_comparison_policy_is_strict(
+    tmp_path: Path, override: dict[str, object], message: str
+) -> None:
+    with pytest.raises(MonitoringError, match=message):
+        load_comparison_policy(_comparison_policy_path(tmp_path, **override))
+
+
+def test_comparison_thresholds_zero_and_precedence(tmp_path: Path) -> None:
+    policy = load_comparison_policy(_comparison_policy_path(tmp_path))
+    baseline = load_monitoring_report(
+        _write_comparison_report(tmp_path / "baseline", _comparison_report())
+    )
+    candidate_data = _comparison_report()
+    candidate_data["aggregate"]["metrics"].update(
+        {"esr": 1.1, "mse": 1.2, "artifact_size_bytes": 0.0}
+    )
+    candidate = load_monitoring_report(
+        _write_comparison_report(tmp_path / "candidate", candidate_data)
+    )
+
+    report, _ = build_monitoring_comparison(
+        baseline, candidate, policy, scenario="controlled_rollback_failure"
+    )
+
+    assert report["decision"] == "investigate"  # Exactly 10% ESR does not cross.
+    assert report["metrics"]["artifact_size_bytes"]["relative_percent"] == -100.0
+    candidate_data["aggregate"]["metrics"]["esr"] = 1.101
+    candidate = load_monitoring_report(
+        _write_comparison_report(tmp_path / "candidate-reject", candidate_data)
+    )
+    report, _ = build_monitoring_comparison(
+        baseline, candidate, policy, scenario="controlled_rollback_failure"
+    )
+    assert report["decision"] == "reject"  # Reject overrides the MSE investigate check.
+
+
+def test_comparison_nulls_zero_or_unavailable_baseline_and_rejects_mismatch(
+    tmp_path: Path,
+) -> None:
+    policy = load_comparison_policy(_comparison_policy_path(tmp_path))
+    baseline_data = _comparison_report()
+    baseline_data["aggregate"]["metrics"]["esr"] = None
+    baseline_data["aggregate"]["metrics"]["artifact_size_bytes"] = 0.0
+    baseline_data["aggregate"]["quality"]["esr"] = None
+    baseline = load_monitoring_report(
+        _write_comparison_report(tmp_path / "baseline", baseline_data)
+    )
+    candidate = load_monitoring_report(
+        _write_comparison_report(tmp_path / "candidate", _comparison_report())
+    )
+    report, _ = build_monitoring_comparison(
+        baseline, candidate, policy, scenario="controlled_rollback_failure"
+    )
+    assert report["metrics"]["esr"]["relative_percent"] is None
+    assert report["metrics"]["artifact_size_bytes"]["relative_percent"] is None
+
+    mismatched_data = _comparison_report()
+    mismatched_data["suite"]["fingerprint"] = "other"
+    mismatched = load_monitoring_report(
+        _write_comparison_report(tmp_path / "mismatch", mismatched_data)
+    )
+    with pytest.raises(MonitoringError, match="suite.fingerprint"):
+        build_monitoring_comparison(
+            baseline, mismatched, policy, scenario="controlled_rollback_failure"
+        )
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("workload", "esr_mode", "legacy", "workload.esr_mode"),
+        ("runtime", "device_name", "other CPU", "runtime.device_name"),
+        ("artifact", "model_type", "gru", "artifact.model_type"),
+    ],
+)
+def test_comparison_rejects_incomparable_runtime_and_workload(
+    tmp_path: Path, section: str, field: str, value: object, message: str
+) -> None:
+    policy = load_comparison_policy(_comparison_policy_path(tmp_path))
+    baseline = load_monitoring_report(
+        _write_comparison_report(tmp_path / "baseline", _comparison_report())
+    )
+    candidate_data = _comparison_report()
+    candidate_data[section][field] = value
+    candidate = load_monitoring_report(
+        _write_comparison_report(tmp_path / "candidate", candidate_data)
+    )
+    with pytest.raises(MonitoringError, match=message):
+        build_monitoring_comparison(
+            baseline, candidate, policy, scenario="controlled_rollback_failure"
+        )
+
+
+def test_compare_monitor_command_refuses_overwrite(tmp_path: Path) -> None:
+    policy = _comparison_policy_path(tmp_path)
+    baseline = _write_comparison_report(tmp_path / "baseline", _comparison_report())
+    candidate = _write_comparison_report(tmp_path / "candidate", _comparison_report())
+    output_dir = tmp_path / "output"
+    arguments = [
+        "--baseline-report",
+        str(baseline),
+        "--candidate-report",
+        str(candidate),
+        "--policy",
+        str(policy),
+        "--scenario",
+        "controlled_rollback_failure",
+        "--output-dir",
+        str(output_dir),
+    ]
+    first = _run_compare_monitor_command(arguments)
+    assert first.returncode == 0, first.stderr
+    assert (
+        json.loads((output_dir / "comparison.json").read_text())["decision"] == "accept"
+    )
+    blocked = _run_compare_monitor_command(arguments)
+    assert blocked.returncode == 2
+    assert "already exists" in blocked.stderr
+
+
+def _write_comparison_report(root: Path, data: dict[str, object]) -> Path:
+    root.mkdir()
+    path = root / "monitoring.json"
+    path.write_text(json.dumps(data))
+    return path
