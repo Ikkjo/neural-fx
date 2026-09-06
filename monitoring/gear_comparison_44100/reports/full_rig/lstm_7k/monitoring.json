@@ -1,0 +1,1405 @@
+{
+  "created_at": "2026-09-05T11:57:57.018618+00:00",
+  "suite": {
+    "id": "gear-comparison-44100-full-rig-test",
+    "fingerprint": "206b728058bc696ee783f71b90b89e7d3f235f65173f5b1e9a2303373c003ffa",
+    "silence_policy": {
+      "id": "digital_silence_v1",
+      "target_rule": "every target sample equals exactly zero",
+      "unavailable_relative_metrics": [
+        "esr",
+        "multi_resolution_stft_distance"
+      ],
+      "relative_aggregation": "mean of eligible scoring segments",
+      "no_eligible_relative_score": null,
+      "stft": {
+        "mode": "legacy",
+        "fft_sizes": [
+          512,
+          1024,
+          2048
+        ],
+        "hop_sizes": [
+          128,
+          256,
+          512
+        ],
+        "win_sizes": [
+          512,
+          1024,
+          2048
+        ]
+      }
+    },
+    "manifest_path": "/home/ikkjo/projects/neural-fx/monitoring/gear_comparison_44100/suites/full_rig.yaml",
+    "manifest_sha256": "5a9ce83146083280aaaa4b329a0bab683b7fa56247ff4ff6887bcf444d5f884e",
+    "cases": [
+      {
+        "id": "early",
+        "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+        "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+        "start_sample": 0,
+        "num_samples": 44100
+      },
+      {
+        "id": "first-middle",
+        "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+        "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+        "start_sample": 926100,
+        "num_samples": 44100
+      },
+      {
+        "id": "second-middle",
+        "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+        "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+        "start_sample": 1896300,
+        "num_samples": 44100
+      },
+      {
+        "id": "late",
+        "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+        "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+        "start_sample": 3395700,
+        "num_samples": 44100
+      }
+    ],
+    "validation_passed": true,
+    "validation_warnings": 0
+  },
+  "artifact": {
+    "path": "/home/ikkjo/projects/neural-fx/local/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_lstm_7k_seed42/best.ckpt",
+    "type": "checkpoint",
+    "inference_category": "native_stateful",
+    "effective_inference_chunk_size": 8192,
+    "sha256": "b569d7adf42a25a170af5ce738d02b9c4cdf827cfc2e6744e857872f17a6dfe5",
+    "size_bytes": 96283,
+    "config_path": "/home/ikkjo/projects/neural-fx/configs/experiments/gear_comparison_44100/runs/full_rig/lstm_7k.yaml",
+    "config_sha256": "b52a9d8783cecc4dc89ea363b049e9820c294e22afe293d2dd838682c389f60f",
+    "model_name": "gear_comparison_44100_full_rig_lstm_7k_seed42",
+    "model_type": "lstm",
+    "trainable_parameters": 6921
+  },
+  "runtime": {
+    "git_commit": "1b54d404cbb86cdadd7751c3355bfe4aacec1b08",
+    "python_version": "3.11.15",
+    "torch_version": "2.11.0+cu130",
+    "torchaudio_version": "2.11.0+cu130",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+    "device": "cpu",
+    "device_class": "cpu",
+    "device_name": "x86_64",
+    "dtype": "float32"
+  },
+  "workload": {
+    "schema_version": "1.0",
+    "suite_id": "gear-comparison-44100-full-rig-test",
+    "sample_rate": 44100,
+    "channels": 1,
+    "segment_length": 44100,
+    "burn_in_samples": 4096,
+    "inference_chunk_size": 8192,
+    "latency_block_sizes": [
+      64,
+      128,
+      256,
+      512
+    ],
+    "warmup_runs": 3,
+    "measurement_runs": 20,
+    "quality_metrics": [
+      "esr",
+      "mse",
+      "multi_resolution_stft_distance"
+    ],
+    "esr_mode": "nam",
+    "esr_pre_emphasis": null,
+    "silence_policy": {
+      "id": "digital_silence_v1",
+      "target_rule": "every target sample equals exactly zero",
+      "unavailable_relative_metrics": [
+        "esr",
+        "multi_resolution_stft_distance"
+      ],
+      "relative_aggregation": "mean of eligible scoring segments",
+      "no_eligible_relative_score": null,
+      "stft": {
+        "mode": "legacy",
+        "fft_sizes": [
+          512,
+          1024,
+          2048
+        ],
+        "hop_sizes": [
+          128,
+          256,
+          512
+        ],
+        "win_sizes": [
+          512,
+          1024,
+          2048
+        ]
+      }
+    },
+    "clipping_threshold": 0.999,
+    "max_abs": 1.0,
+    "allow_target_full_scale": false,
+    "case_ids": [
+      "early",
+      "first-middle",
+      "second-middle",
+      "late"
+    ]
+  },
+  "validation": [
+    {
+      "case_id": "early",
+      "name": "files_exist",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target files exist",
+      "value": null
+    },
+    {
+      "case_id": "early",
+      "name": "sample_rate",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target use 44100 Hz",
+      "value": 44100
+    },
+    {
+      "case_id": "early",
+      "name": "channels",
+      "passed": true,
+      "severity": "error",
+      "message": "Expected 1 channels; input=1, target=1",
+      "value": null
+    },
+    {
+      "case_id": "early",
+      "name": "usable_length",
+      "passed": true,
+      "severity": "error",
+      "message": "Need 44100 samples and found 3907584",
+      "value": 3907584
+    },
+    {
+      "case_id": "early",
+      "name": "input_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "input audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "early",
+      "name": "input_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "input peak absolute amplitude is 0.488142",
+      "value": 0.48814210295677185
+    },
+    {
+      "case_id": "early",
+      "name": "input_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "input has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "early",
+      "name": "target_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "target audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "early",
+      "name": "target_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "target peak absolute amplitude is 0.313246",
+      "value": 0.3132460117340088
+    },
+    {
+      "case_id": "early",
+      "name": "target_full_scale",
+      "passed": true,
+      "severity": "error",
+      "message": "target has 0 samples at or above 1.0",
+      "value": 0
+    },
+    {
+      "case_id": "early",
+      "name": "target_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "target has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "first-middle",
+      "name": "files_exist",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target files exist",
+      "value": null
+    },
+    {
+      "case_id": "first-middle",
+      "name": "sample_rate",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target use 44100 Hz",
+      "value": 44100
+    },
+    {
+      "case_id": "first-middle",
+      "name": "channels",
+      "passed": true,
+      "severity": "error",
+      "message": "Expected 1 channels; input=1, target=1",
+      "value": null
+    },
+    {
+      "case_id": "first-middle",
+      "name": "usable_length",
+      "passed": true,
+      "severity": "error",
+      "message": "Need 970200 samples and found 3907584",
+      "value": 3907584
+    },
+    {
+      "case_id": "first-middle",
+      "name": "input_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "input audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "first-middle",
+      "name": "input_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "input peak absolute amplitude is 0.691941",
+      "value": 0.6919412016868591
+    },
+    {
+      "case_id": "first-middle",
+      "name": "input_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "input has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "first-middle",
+      "name": "target_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "target audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "first-middle",
+      "name": "target_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "target peak absolute amplitude is 0.385356",
+      "value": 0.3853559195995331
+    },
+    {
+      "case_id": "first-middle",
+      "name": "target_full_scale",
+      "passed": true,
+      "severity": "error",
+      "message": "target has 0 samples at or above 1.0",
+      "value": 0
+    },
+    {
+      "case_id": "first-middle",
+      "name": "target_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "target has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "second-middle",
+      "name": "files_exist",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target files exist",
+      "value": null
+    },
+    {
+      "case_id": "second-middle",
+      "name": "sample_rate",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target use 44100 Hz",
+      "value": 44100
+    },
+    {
+      "case_id": "second-middle",
+      "name": "channels",
+      "passed": true,
+      "severity": "error",
+      "message": "Expected 1 channels; input=1, target=1",
+      "value": null
+    },
+    {
+      "case_id": "second-middle",
+      "name": "usable_length",
+      "passed": true,
+      "severity": "error",
+      "message": "Need 1940400 samples and found 3907584",
+      "value": 3907584
+    },
+    {
+      "case_id": "second-middle",
+      "name": "input_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "input audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "second-middle",
+      "name": "input_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "input peak absolute amplitude is 0.677015",
+      "value": 0.6770148277282715
+    },
+    {
+      "case_id": "second-middle",
+      "name": "input_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "input has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "second-middle",
+      "name": "target_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "target audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "second-middle",
+      "name": "target_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "target peak absolute amplitude is 0.334574",
+      "value": 0.334573894739151
+    },
+    {
+      "case_id": "second-middle",
+      "name": "target_full_scale",
+      "passed": true,
+      "severity": "error",
+      "message": "target has 0 samples at or above 1.0",
+      "value": 0
+    },
+    {
+      "case_id": "second-middle",
+      "name": "target_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "target has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "late",
+      "name": "files_exist",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target files exist",
+      "value": null
+    },
+    {
+      "case_id": "late",
+      "name": "sample_rate",
+      "passed": true,
+      "severity": "error",
+      "message": "Input and target use 44100 Hz",
+      "value": 44100
+    },
+    {
+      "case_id": "late",
+      "name": "channels",
+      "passed": true,
+      "severity": "error",
+      "message": "Expected 1 channels; input=1, target=1",
+      "value": null
+    },
+    {
+      "case_id": "late",
+      "name": "usable_length",
+      "passed": true,
+      "severity": "error",
+      "message": "Need 3439800 samples and found 3907584",
+      "value": 3907584
+    },
+    {
+      "case_id": "late",
+      "name": "input_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "input audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "late",
+      "name": "input_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "input peak absolute amplitude is 0.602012",
+      "value": 0.6020118594169617
+    },
+    {
+      "case_id": "late",
+      "name": "input_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "input has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "late",
+      "name": "target_finite",
+      "passed": true,
+      "severity": "error",
+      "message": "target audio contains only finite values",
+      "value": null
+    },
+    {
+      "case_id": "late",
+      "name": "target_amplitude",
+      "passed": true,
+      "severity": "error",
+      "message": "target peak absolute amplitude is 0.349398",
+      "value": 0.34939807653427124
+    },
+    {
+      "case_id": "late",
+      "name": "target_full_scale",
+      "passed": true,
+      "severity": "error",
+      "message": "target has 0 samples at or above 1.0",
+      "value": 0
+    },
+    {
+      "case_id": "late",
+      "name": "target_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "target has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "early",
+      "name": "prediction_amplitude",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction peak absolute amplitude is 0.174201",
+      "value": 0.1742008775472641
+    },
+    {
+      "case_id": "early",
+      "name": "prediction_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "first-middle",
+      "name": "prediction_amplitude",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction peak absolute amplitude is 0.288361",
+      "value": 0.288361132144928
+    },
+    {
+      "case_id": "first-middle",
+      "name": "prediction_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "second-middle",
+      "name": "prediction_amplitude",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction peak absolute amplitude is 0.240873",
+      "value": 0.24087291955947876
+    },
+    {
+      "case_id": "second-middle",
+      "name": "prediction_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction has 0 samples at or above 0.999",
+      "value": 0
+    },
+    {
+      "case_id": "late",
+      "name": "prediction_amplitude",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction peak absolute amplitude is 0.267012",
+      "value": 0.2670118808746338
+    },
+    {
+      "case_id": "late",
+      "name": "prediction_clipping",
+      "passed": true,
+      "severity": "warning",
+      "message": "prediction has 0 samples at or above 0.999",
+      "value": 0
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "early",
+      "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+      "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+      "evaluated_samples": 44100,
+      "metric_samples": 40004,
+      "metrics": {
+        "esr": 0.46704843640327454,
+        "mse": 0.0021196557208895683,
+        "multi_resolution_stft_distance": 1.6605840921401978
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0021196557208895683,
+        "prediction_rms": 0.051133427768945694,
+        "prediction_abs_peak": 0.1742008775472641
+      },
+      "latency": {
+        "full": {
+          "runs": 20,
+          "samples_per_run": 44100,
+          "measurements_ms": [
+            31.742442,
+            33.722034,
+            35.128828,
+            33.778321,
+            31.981263,
+            33.649195,
+            32.134777,
+            31.871542,
+            33.933443,
+            31.910357,
+            53.141775,
+            42.534459,
+            32.493386,
+            33.30696,
+            32.581653,
+            32.651347,
+            32.519317,
+            32.435907,
+            32.955033,
+            32.287269
+          ],
+          "p50_latency_ms": 32.6165,
+          "p95_latency_ms": 43.064824800000004,
+          "min_latency_ms": 31.742442,
+          "max_latency_ms": 53.141775,
+          "real_time_factor": 0.0326165
+        },
+        "block_64": {
+          "runs": 20,
+          "samples_per_run": 64,
+          "measurements_ms": [
+            0.180013,
+            0.181153,
+            0.221069,
+            0.245809,
+            0.187407,
+            0.17664,
+            0.179491,
+            0.176173,
+            0.169439,
+            0.171704,
+            0.164436,
+            0.162138,
+            0.171903,
+            0.162929,
+            0.162124,
+            0.159708,
+            0.165183,
+            0.164278,
+            0.166227,
+            0.160957
+          ],
+          "p50_latency_ms": 0.1705715,
+          "p95_latency_ms": 0.222306,
+          "min_latency_ms": 0.159708,
+          "max_latency_ms": 0.245809,
+          "real_time_factor": 0.11753442421874999
+        },
+        "block_128": {
+          "runs": 20,
+          "samples_per_run": 128,
+          "measurements_ms": [
+            0.221673,
+            0.216361,
+            0.214383,
+            0.221942,
+            0.209516,
+            0.215691,
+            0.216708,
+            0.218611,
+            0.215797,
+            0.252336,
+            0.276759,
+            0.23271,
+            0.22081,
+            0.217352,
+            0.217445,
+            0.214068,
+            0.217126,
+            0.215421,
+            0.214823,
+            0.204072
+          ],
+          "p50_latency_ms": 0.21691700000000003,
+          "p95_latency_ms": 0.25355715,
+          "min_latency_ms": 0.204072,
+          "max_latency_ms": 0.276759,
+          "real_time_factor": 0.07473468515625001
+        },
+        "block_256": {
+          "runs": 20,
+          "samples_per_run": 256,
+          "measurements_ms": [
+            0.313719,
+            0.30737,
+            0.310535,
+            0.310842,
+            0.312584,
+            0.316684,
+            0.324656,
+            0.319305,
+            0.306644,
+            0.322732,
+            0.308581,
+            0.476055,
+            0.553842,
+            0.373771,
+            0.361224,
+            0.326694,
+            0.31895,
+            0.326265,
+            0.315124,
+            0.314131
+          ],
+          "p50_latency_ms": 0.317817,
+          "p95_latency_ms": 0.4799443500000001,
+          "min_latency_ms": 0.306644,
+          "max_latency_ms": 0.553842,
+          "real_time_factor": 0.054748944140625005
+        },
+        "block_512": {
+          "runs": 20,
+          "samples_per_run": 512,
+          "measurements_ms": [
+            0.532786,
+            0.504045,
+            0.517269,
+            0.621436,
+            0.538685,
+            0.52449,
+            0.502666,
+            0.518828,
+            0.51989,
+            0.507728,
+            0.508789,
+            0.517635,
+            0.50647,
+            0.520893,
+            0.508644,
+            0.515266,
+            0.521785,
+            0.603559,
+            0.531224,
+            0.524049
+          ],
+          "p50_latency_ms": 0.5193589999999999,
+          "p95_latency_ms": 0.6044528499999999,
+          "min_latency_ms": 0.502666,
+          "max_latency_ms": 0.621436,
+          "real_time_factor": 0.044733851367187494
+        }
+      }
+    },
+    {
+      "case_id": "first-middle",
+      "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+      "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+      "evaluated_samples": 44100,
+      "metric_samples": 40004,
+      "metrics": {
+        "esr": 0.2718360722064972,
+        "mse": 0.0024584580678492785,
+        "multi_resolution_stft_distance": 1.428425669670105
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0024584580678492785,
+        "prediction_rms": 0.09231013059616089,
+        "prediction_abs_peak": 0.288361132144928
+      },
+      "latency": {
+        "full": {
+          "runs": 20,
+          "samples_per_run": 44100,
+          "measurements_ms": [
+            32.587144,
+            32.267236,
+            32.903532,
+            44.614911,
+            33.690438,
+            31.791577,
+            37.42459,
+            32.303943,
+            43.623033,
+            32.088616,
+            33.245198,
+            32.206863,
+            33.181519,
+            32.302838,
+            32.910614,
+            32.624323,
+            32.501072,
+            33.24178,
+            32.305479,
+            33.203639
+          ],
+          "p50_latency_ms": 32.763927499999994,
+          "p95_latency_ms": 43.6726269,
+          "min_latency_ms": 31.791577,
+          "max_latency_ms": 44.614911,
+          "real_time_factor": 0.03276392749999999
+        },
+        "block_64": {
+          "runs": 20,
+          "samples_per_run": 64,
+          "measurements_ms": [
+            0.17516,
+            0.188148,
+            0.256605,
+            0.190746,
+            0.173912,
+            0.1701,
+            0.167824,
+            0.190061,
+            0.171575,
+            0.168198,
+            0.167144,
+            0.166364,
+            0.159574,
+            0.164971,
+            0.163532,
+            0.163207,
+            0.160565,
+            0.161223,
+            0.156901,
+            0.159515
+          ],
+          "p50_latency_ms": 0.167484,
+          "p95_latency_ms": 0.19403895000000004,
+          "min_latency_ms": 0.156901,
+          "max_latency_ms": 0.256605,
+          "real_time_factor": 0.11540694374999999
+        },
+        "block_128": {
+          "runs": 20,
+          "samples_per_run": 128,
+          "measurements_ms": [
+            0.213924,
+            0.214069,
+            0.212458,
+            0.212657,
+            0.214143,
+            0.214025,
+            0.224712,
+            0.220433,
+            0.214502,
+            0.217423,
+            0.22082,
+            0.214901,
+            0.212953,
+            0.213262,
+            0.212123,
+            0.28185,
+            0.253451,
+            0.221594,
+            0.214079,
+            0.220379
+          ],
+          "p50_latency_ms": 0.2143225,
+          "p95_latency_ms": 0.25487095,
+          "min_latency_ms": 0.212123,
+          "max_latency_ms": 0.28185,
+          "real_time_factor": 0.073840798828125
+        },
+        "block_256": {
+          "runs": 20,
+          "samples_per_run": 256,
+          "measurements_ms": [
+            0.304316,
+            0.313122,
+            0.317673,
+            0.316812,
+            0.315294,
+            0.320315,
+            0.31237,
+            0.313109,
+            0.311246,
+            0.317578,
+            0.313203,
+            0.311951,
+            0.314454,
+            0.309052,
+            0.30518,
+            0.310615,
+            0.388329,
+            0.334064,
+            0.338041,
+            0.320821
+          ],
+          "p50_latency_ms": 0.3138285,
+          "p95_latency_ms": 0.3405554,
+          "min_latency_ms": 0.304316,
+          "max_latency_ms": 0.388329,
+          "real_time_factor": 0.054061862695312504
+        },
+        "block_512": {
+          "runs": 20,
+          "samples_per_run": 512,
+          "measurements_ms": [
+            0.500168,
+            0.491167,
+            0.493636,
+            0.509397,
+            0.50309,
+            0.506949,
+            0.523812,
+            0.573573,
+            0.512575,
+            0.51698,
+            0.505425,
+            0.512509,
+            0.519595,
+            0.511547,
+            0.502535,
+            0.509559,
+            0.497609,
+            0.505125,
+            0.500686,
+            0.51281
+          ],
+          "p50_latency_ms": 0.508173,
+          "p95_latency_ms": 0.52630005,
+          "min_latency_ms": 0.491167,
+          "max_latency_ms": 0.573573,
+          "real_time_factor": 0.0437703697265625
+        }
+      }
+    },
+    {
+      "case_id": "second-middle",
+      "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+      "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+      "evaluated_samples": 44100,
+      "metric_samples": 40004,
+      "metrics": {
+        "esr": 0.29059037566185,
+        "mse": 0.0029477577190846205,
+        "multi_resolution_stft_distance": 1.3771668672561646
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0029477577190846205,
+        "prediction_rms": 0.09710124880075455,
+        "prediction_abs_peak": 0.24087291955947876
+      },
+      "latency": {
+        "full": {
+          "runs": 20,
+          "samples_per_run": 44100,
+          "measurements_ms": [
+            31.859546,
+            32.420367,
+            31.80831,
+            32.340176,
+            31.88803,
+            32.192437,
+            32.474096,
+            31.937449,
+            32.400558,
+            32.014627,
+            32.140116,
+            31.988436,
+            32.666732,
+            32.126939,
+            32.165026,
+            32.10542,
+            32.126649,
+            32.406514,
+            31.990669,
+            32.304361
+          ],
+          "p50_latency_ms": 32.1335275,
+          "p95_latency_ms": 32.483727800000004,
+          "min_latency_ms": 31.80831,
+          "max_latency_ms": 32.666732,
+          "real_time_factor": 0.0321335275
+        },
+        "block_64": {
+          "runs": 20,
+          "samples_per_run": 64,
+          "measurements_ms": [
+            0.172909,
+            0.1714,
+            0.177867,
+            0.176367,
+            0.169017,
+            0.183039,
+            0.173052,
+            0.168826,
+            0.165554,
+            0.164805,
+            0.167044,
+            0.169901,
+            0.159185,
+            0.15937,
+            0.160695,
+            0.160597,
+            0.15935,
+            0.167392,
+            0.16055,
+            0.159082
+          ],
+          "p50_latency_ms": 0.167218,
+          "p95_latency_ms": 0.1781256,
+          "min_latency_ms": 0.159082,
+          "max_latency_ms": 0.183039,
+          "real_time_factor": 0.115223653125
+        },
+        "block_128": {
+          "runs": 20,
+          "samples_per_run": 128,
+          "measurements_ms": [
+            0.218688,
+            0.226366,
+            0.213723,
+            0.218705,
+            0.215442,
+            0.225721,
+            0.220852,
+            0.209872,
+            0.212823,
+            0.215239,
+            0.214422,
+            0.213272,
+            0.213509,
+            0.218007,
+            0.213239,
+            0.210805,
+            0.229657,
+            0.223616,
+            0.218564,
+            0.21226
+          ],
+          "p50_latency_ms": 0.2153405,
+          "p95_latency_ms": 0.22653055,
+          "min_latency_ms": 0.209872,
+          "max_latency_ms": 0.229657,
+          "real_time_factor": 0.074191531640625
+        },
+        "block_256": {
+          "runs": 20,
+          "samples_per_run": 256,
+          "measurements_ms": [
+            0.323579,
+            0.310229,
+            0.302171,
+            0.30602,
+            0.310071,
+            0.301254,
+            0.306906,
+            0.312147,
+            0.313524,
+            0.314393,
+            0.310697,
+            0.309294,
+            0.310726,
+            0.309093,
+            0.314659,
+            0.311344,
+            0.304594,
+            0.332786,
+            0.326182,
+            0.317786
+          ],
+          "p50_latency_ms": 0.31071150000000003,
+          "p95_latency_ms": 0.32651220000000003,
+          "min_latency_ms": 0.301254,
+          "max_latency_ms": 0.332786,
+          "real_time_factor": 0.05352491074218751
+        },
+        "block_512": {
+          "runs": 20,
+          "samples_per_run": 512,
+          "measurements_ms": [
+            0.506618,
+            0.506428,
+            0.503387,
+            0.507927,
+            0.496786,
+            0.494641,
+            0.501692,
+            0.519116,
+            0.505362,
+            0.543775,
+            0.50723,
+            0.509781,
+            0.509363,
+            0.50618,
+            0.500283,
+            0.509277,
+            0.507201,
+            0.507302,
+            0.500812,
+            0.539185
+          ],
+          "p50_latency_ms": 0.5069095,
+          "p95_latency_ms": 0.5394145,
+          "min_latency_ms": 0.494641,
+          "max_latency_ms": 0.543775,
+          "real_time_factor": 0.04366154091796875
+        }
+      }
+    },
+    {
+      "case_id": "late",
+      "input_sha256": "896520a7e90f66041d79bfbd0b8516f8e6f6c6df4753f09b0e3b5e0836dd516c",
+      "target_sha256": "7274726457eb6903eaf0406f53840d60d3ce55b2147d95f3554ba0f74c130f94",
+      "evaluated_samples": 44100,
+      "metric_samples": 40004,
+      "metrics": {
+        "esr": 0.3227680027484894,
+        "mse": 0.0033780396915972233,
+        "multi_resolution_stft_distance": 1.434583067893982
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0033780396915972233,
+        "prediction_rms": 0.09679378569126129,
+        "prediction_abs_peak": 0.2670118808746338
+      },
+      "latency": {
+        "full": {
+          "runs": 20,
+          "samples_per_run": 44100,
+          "measurements_ms": [
+            32.076663,
+            32.296086,
+            32.436265,
+            32.349081,
+            31.943118,
+            32.377204,
+            32.07939,
+            32.028465,
+            32.342558,
+            32.037239,
+            32.213714,
+            32.076463,
+            48.431584,
+            33.299314,
+            32.010444,
+            32.43667,
+            31.90653,
+            40.92933,
+            35.081621,
+            31.864688
+          ],
+          "p50_latency_ms": 32.254900000000006,
+          "p95_latency_ms": 41.3044427,
+          "min_latency_ms": 31.864688,
+          "max_latency_ms": 48.431584,
+          "real_time_factor": 0.0322549
+        },
+        "block_64": {
+          "runs": 20,
+          "samples_per_run": 64,
+          "measurements_ms": [
+            0.170256,
+            0.168008,
+            0.162456,
+            0.166438,
+            0.162313,
+            0.160451,
+            0.164676,
+            0.169608,
+            0.165776,
+            0.212093,
+            0.162973,
+            0.165223,
+            0.156133,
+            0.160189,
+            0.157559,
+            0.161471,
+            0.159232,
+            0.157983,
+            0.158445,
+            0.1598
+          ],
+          "p50_latency_ms": 0.1623845,
+          "p95_latency_ms": 0.17234785000000002,
+          "min_latency_ms": 0.156133,
+          "max_latency_ms": 0.212093,
+          "real_time_factor": 0.11189306953124999
+        },
+        "block_128": {
+          "runs": 20,
+          "samples_per_run": 128,
+          "measurements_ms": [
+            0.215889,
+            0.208039,
+            0.209453,
+            0.207611,
+            0.20575,
+            0.206505,
+            0.214405,
+            0.213415,
+            0.222168,
+            0.207535,
+            0.206893,
+            0.207926,
+            0.214448,
+            0.212968,
+            0.211498,
+            0.21167,
+            0.214827,
+            0.207869,
+            0.210814,
+            0.208956
+          ],
+          "p50_latency_ms": 0.2101335,
+          "p95_latency_ms": 0.21620295,
+          "min_latency_ms": 0.20575,
+          "max_latency_ms": 0.222168,
+          "real_time_factor": 0.072397557421875
+        },
+        "block_256": {
+          "runs": 20,
+          "samples_per_run": 256,
+          "measurements_ms": [
+            0.308341,
+            0.324382,
+            0.308185,
+            0.32983,
+            0.526491,
+            0.555144,
+            0.494775,
+            0.351137,
+            0.331955,
+            0.311667,
+            0.316216,
+            0.321395,
+            0.326611,
+            0.317707,
+            0.309758,
+            0.3036,
+            0.303096,
+            0.302706,
+            0.312362,
+            0.304707
+          ],
+          "p50_latency_ms": 0.3169615,
+          "p95_latency_ms": 0.5279236500000001,
+          "min_latency_ms": 0.302706,
+          "max_latency_ms": 0.555144,
+          "real_time_factor": 0.0546015708984375
+        },
+        "block_512": {
+          "runs": 20,
+          "samples_per_run": 512,
+          "measurements_ms": [
+            0.49124,
+            0.494259,
+            0.487074,
+            0.507154,
+            0.504508,
+            0.507761,
+            0.503536,
+            0.50295,
+            0.500054,
+            0.49169,
+            0.490445,
+            0.490089,
+            0.489792,
+            0.493371,
+            0.487959,
+            0.500341,
+            0.503425,
+            0.503537,
+            0.496249,
+            0.492341
+          ],
+          "p50_latency_ms": 0.49525399999999997,
+          "p95_latency_ms": 0.50718435,
+          "min_latency_ms": 0.487074,
+          "max_latency_ms": 0.507761,
+          "real_time_factor": 0.042657619921875
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "metrics": {
+      "esr": 0.33806072175502777,
+      "mse": 0.0027259777998551726,
+      "multi_resolution_stft_distance": 1.4751899242401123,
+      "p50_latency_ms": 32.3458195,
+      "p95_latency_ms": 42.588887699999994,
+      "real_time_factor": 0.0323458195,
+      "peak_memory_bytes": 863129600.0,
+      "artifact_size_bytes": 96283.0
+    },
+    "quality": {
+      "esr": 0.33806072175502777,
+      "mse": 0.0027259777998551726,
+      "multi_resolution_stft_distance": 1.4751899242401123
+    },
+    "relative_score_counts": {
+      "esr": {
+        "eligible": 4,
+        "excluded": 0
+      },
+      "multi_resolution_stft_distance": {
+        "eligible": 4,
+        "excluded": 0
+      }
+    },
+    "silent_case_count": 0,
+    "full_latency": {
+      "runs": 80,
+      "samples_per_run": 44100,
+      "measurements_ms": [
+        31.742442,
+        33.722034,
+        35.128828,
+        33.778321,
+        31.981263,
+        33.649195,
+        32.134777,
+        31.871542,
+        33.933443,
+        31.910357,
+        53.141775,
+        42.534459,
+        32.493386,
+        33.30696,
+        32.581653,
+        32.651347,
+        32.519317,
+        32.435907,
+        32.955033,
+        32.287269,
+        32.587144,
+        32.267236,
+        32.903532,
+        44.614911,
+        33.690438,
+        31.791577,
+        37.42459,
+        32.303943,
+        43.623033,
+        32.088616,
+        33.245198,
+        32.206863,
+        33.181519,
+        32.302838,
+        32.910614,
+        32.624323,
+        32.501072,
+        33.24178,
+        32.305479,
+        33.203639,
+        31.859546,
+        32.420367,
+        31.80831,
+        32.340176,
+        31.88803,
+        32.192437,
+        32.474096,
+        31.937449,
+        32.400558,
+        32.014627,
+        32.140116,
+        31.988436,
+        32.666732,
+        32.126939,
+        32.165026,
+        32.10542,
+        32.126649,
+        32.406514,
+        31.990669,
+        32.304361,
+        32.076663,
+        32.296086,
+        32.436265,
+        32.349081,
+        31.943118,
+        32.377204,
+        32.07939,
+        32.028465,
+        32.342558,
+        32.037239,
+        32.213714,
+        32.076463,
+        48.431584,
+        33.299314,
+        32.010444,
+        32.43667,
+        31.90653,
+        40.92933,
+        35.081621,
+        31.864688
+      ],
+      "p50_latency_ms": 32.3458195,
+      "p95_latency_ms": 42.588887699999994,
+      "min_latency_ms": 31.742442,
+      "max_latency_ms": 53.141775,
+      "real_time_factor": 0.0323458195
+    },
+    "memory": {
+      "peak_memory_bytes": 863129600,
+      "kind": "process_peak_rss_bytes",
+      "process_peak_rss_bytes": 863129600,
+      "cuda_peak_allocated_bytes": null,
+      "cuda_peak_reserved_bytes": null
+    }
+  },
+  "schema_version": "1.1"
+}
