@@ -5,7 +5,9 @@ import json
 import pytest
 import torch
 
+from neural_fx.analysis import benchmarking
 from neural_fx.analysis.benchmarking import (
+    _cpu_name,
     benchmark_model,
     format_benchmark_table,
     load_benchmark_result,
@@ -104,6 +106,31 @@ def test_benchmark_result_round_trip_and_markdown_table(tmp_path) -> None:
     assert "64-sample p95 (ms)" in table
 
 
+@pytest.mark.parametrize(
+    ("processor", "machine", "cpuinfo", "expected"),
+    [
+        ("Intel CPU", "x86_64", None, "Intel CPU"),
+        ("", "x86_64", "model name\t: Test CPU\n", "Test CPU"),
+        ("x86_64", "x86_64", "model name: Test CPU\n", "Test CPU"),
+        ("", "x86_64", None, "x86_64"),
+    ],
+)
+def test_cpu_name_uses_processor_procfs_then_machine(
+    monkeypatch, processor, machine, cpuinfo, expected
+) -> None:
+    monkeypatch.setattr(benchmarking.platform, "processor", lambda: processor)
+    monkeypatch.setattr(benchmarking.platform, "machine", lambda: machine)
+    monkeypatch.setattr(benchmarking.sys, "platform", "linux")
+    if cpuinfo is None:
+        monkeypatch.setattr(
+            benchmarking.Path, "read_text", lambda _: (_ for _ in ()).throw(OSError())
+        )
+    else:
+        monkeypatch.setattr(benchmarking.Path, "read_text", lambda _: cpuinfo)
+
+    assert _cpu_name() == expected
+
+
 def test_model_loader_uses_checkpoint_embedded_config(tmp_path) -> None:
     model_config = ModelConfig(
         type="gru",
@@ -126,9 +153,7 @@ def test_model_loader_uses_checkpoint_embedded_config(tmp_path) -> None:
     checkpoint_path = tmp_path / "embedded.ckpt"
     torch.save(checkpoint, checkpoint_path)
 
-    model, loaded_config = load_model_for_evaluation(
-        checkpoint_path=checkpoint_path
-    )
+    model, loaded_config = load_model_for_evaluation(checkpoint_path=checkpoint_path)
 
     assert loaded_config == config
     assert model.config.type == "gru"

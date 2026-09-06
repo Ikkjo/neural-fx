@@ -259,20 +259,26 @@ def test_experiment_phase_command_counts(phase: str, expected_count: int) -> Non
     commands = build_phase_commands(phase)
 
     assert len(commands) == expected_count
-    assert all("github.com" not in argument for command in commands for argument in command.argv)
+    assert all(
+        "github.com" not in argument
+        for command in commands
+        for argument in command.argv
+    )
+
+
+def test_compare_commands_pass_target_lstm_reference() -> None:
+    for command in build_phase_commands("compare", GEAR_COMPARISON_EXPERIMENT):
+        index = command.argv.index("--reference-experiment-id")
+        assert command.argv[index + 1].endswith("_lstm_7k_seed42")
 
 
 def test_smoke_phase_uses_one_epoch_and_only_full_rig() -> None:
     commands = build_phase_commands("smoke")
 
     assert {
-        tuple(
-            command.run_id.removeprefix("smoke-nano_44100_").split("_")[:2]
-        )
+        tuple(command.run_id.removeprefix("smoke-nano_44100_").split("_")[:2])
         for command in commands
-    } == {
-        ("full", "rig")
-    }
+    } == {("full", "rig")}
     for command in commands:
         assert "--max_epochs" in command.argv
         index = command.argv.index("--max_epochs")

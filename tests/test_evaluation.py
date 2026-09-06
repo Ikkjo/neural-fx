@@ -9,6 +9,7 @@ import yaml
 from scipy.io import wavfile
 
 from neural_fx.analysis.evaluation import (
+    COMPARISON_SCHEMA_VERSION,
     _calculate_evaluation_metrics,
     _EvaluationSignals,
     build_comparison_report,
@@ -154,9 +155,7 @@ def test_manifest_evaluation_writes_metrics_and_listening_samples(tmp_path) -> N
         "state_reset_count": 1,
     }
     assert all(Path(path).exists() for path in result["artifacts"].values())
-    assert {
-        key: Path(path).name for key, path in result["artifacts"].items()
-    } == {
+    assert {key: Path(path).name for key, path in result["artifacts"].items()} == {
         "input_audio": "input.wav",
         "target_audio": "target.wav",
         "prediction_audio": "prediction.wav",
@@ -202,17 +201,18 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,
-                    "esr_mode": "nam",
-                    "esr_pre_emphasis": None,
-                    "silence_policy": silence_policy_metadata(),
-                    "stft_window_starts": [0],
-                    "stft_window_samples": 4096,
-                },
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+                "silence_policy": silence_policy_metadata(),
+                "stft_window_starts": [0],
+                "stft_window_samples": 4096,
+            },
             "performance": None,
         }
 
     report, markdown = build_comparison_report(
         [result("lstm", 1000, "lstm"), result("gru", 1200, "gru")],
+        reference_experiment_id="lstm",
         size_tolerance=1.25,
     )
 
@@ -230,7 +230,12 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
     assert "ESR is the primary ranking metric" in markdown
     assert report["size_groups"][0]["experiments"] == ["lstm", "gru"]
     assert "must not be used as a final quality ranking" in markdown
-    assert "[checkpoint](/model.ckpt)" in markdown
+    assert report["reference_experiment_id"] == "lstm"
+    assert report["schema_version"] == COMPARISON_SCHEMA_VERSION == "1.2"
+    assert report["results"][0]["relative_to_reference"]["esr"] == {
+        "ratio": 1.0,
+        "percent_change": 0.0,
+    }
 
 
 @pytest.mark.parametrize(
@@ -241,7 +246,9 @@ def test_comparison_report_groups_measured_sizes_and_marks_smoke_results() -> No
         ("preparation_delay_samples", -41),
     ],
 )
-def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object) -> None:
+def test_comparison_report_rejects_mismatched_esr_recipe(
+    key: str, value: object
+) -> None:
     def result(experiment: str) -> dict:
         return {
             "experiment_id": experiment,
@@ -261,18 +268,18 @@ def test_comparison_report_rejects_mismatched_esr_recipe(key: str, value: object
                 "normalization": "paired_peak",
                 "mask_first": 0,
                 "metric_samples": 4096,
-                    "esr_mode": "nam",
-                    "esr_pre_emphasis": None,
-                    "silence_policy": silence_policy_metadata(),
-                    "stft_window_starts": [0],
-                    "stft_window_samples": 4096,
-                },
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+                "silence_policy": silence_policy_metadata(),
+                "stft_window_starts": [0],
+                "stft_window_samples": 4096,
+            },
         }
 
     first, second = result("first"), result("second")
     second["dataset"][key] = value
     with pytest.raises(ValueError, match="same aligned dataset segment"):
-        build_comparison_report([first, second])
+        build_comparison_report([first, second], reference_experiment_id="first")
 
 
 def test_comparison_report_requires_esr_recipe() -> None:
@@ -285,7 +292,7 @@ def test_comparison_report_requires_esr_recipe() -> None:
         "dataset": {},
     }
     with pytest.raises(ValueError, match="must record esr_mode and esr_pre_emphasis"):
-        build_comparison_report([result])
+        build_comparison_report([result], reference_experiment_id="incomplete")
 
 
 def test_comparison_report_does_not_rank_unavailable_esr() -> None:
@@ -322,13 +329,111 @@ def test_comparison_report_does_not_rank_unavailable_esr() -> None:
         }
 
     report, markdown = build_comparison_report(
-        [result("silent", None), result("eligible", 0.5)]
+        [result("silent", None), result("eligible", 0.5)],
+        reference_experiment_id="silent",
     )
 
     rows = {row["experiment_id"]: row for row in report["results"]}
     assert rows["eligible"]["esr_rank"] == 1
     assert rows["silent"]["esr_rank"] is None
     assert "N/A" in markdown
+
+
+def test_comparison_report_rejects_unknown_reference() -> None:
+    result = {
+        "experiment_id": "known",
+        "run_kind": "smoke",
+        "sources": {},
+        "model": {"trainable_parameters": 1},
+        "metrics": {"esr": 1.0},
+        "dataset": {
+            "esr_mode": "nam",
+            "esr_pre_emphasis": None,
+            "silence_policy": silence_policy_metadata(),
+            "stft_window_starts": [0],
+            "stft_window_samples": 1,
+        },
+    }
+    with pytest.raises(ValueError, match="Expected exactly one reference"):
+        build_comparison_report([result], reference_experiment_id="missing")
+
+
+def test_comparison_report_includes_relative_cpu_values_and_rejects_mismatch() -> None:
+    def result(experiment: str, factor: float) -> dict:
+        blocks = [
+            {
+                "block_size": size,
+                "p95_ms": factor * size / 100,
+                "deadline_ms": size / 48_000 * 1000,
+                "deadline_misses": 0,
+                "runs": 20,
+            }
+            for size in (64, 128, 256, 512)
+        ]
+        return {
+            "experiment_id": experiment,
+            "run_kind": "final",
+            "sources": {},
+            "model": {"type": "lstm", "trainable_parameters": int(100 * factor)},
+            "metrics": {
+                "esr": factor,
+                "mse": factor,
+                "correlation": 0.5,
+                "multi_resolution_stft_distance": factor,
+            },
+            "dataset": {
+                "input_audio": "/input.wav",
+                "target_audio": "/target.wav",
+                "split": "test",
+                "start_sample": 0,
+                "evaluated_samples": 4096,
+                "sample_rate": 48_000,
+                "latency_samples": 0,
+                "preparation_delay_samples": 0,
+                "normalization": "none",
+                "mask_first": 0,
+                "metric_samples": 4096,
+                "esr_mode": "nam",
+                "esr_pre_emphasis": None,
+                "silence_policy": silence_policy_metadata(),
+                "stft_window_starts": [0],
+                "stft_window_samples": 4096,
+            },
+            "performance": {
+                "runtime": {
+                    "device": "cpu",
+                    "device_name": "Test CPU",
+                    "dtype": "float32",
+                    "torch_num_threads": 1,
+                    "platform": "Test OS",
+                    "torch_version": "test",
+                },
+                "workload": {"warmup_runs": 3, "measurement_runs": 20},
+                "offline": {"real_time_factor": factor},
+                "blocks": blocks,
+                "memory": {"model_state_bytes": int(400 * factor)},
+            },
+        }
+
+    reference, candidate = result("lstm", 1.0), result("gru", 0.5)
+    report, markdown = build_comparison_report(
+        [reference, candidate], reference_experiment_id="lstm"
+    )
+
+    rows = {row["experiment_id"]: row for row in report["results"]}
+    assert rows["lstm"]["relative_to_reference"]["esr"] == {
+        "ratio": 1.0,
+        "percent_change": 0.0,
+    }
+    assert rows["gru"]["relative_to_reference"]["block_p95_ms"]["128"] == {
+        "ratio": 0.5,
+        "percent_change": -50.0,
+    }
+    assert "Test CPU" in markdown
+    assert "64 p95/deadline/misses" in markdown
+    candidate["performance"]["workload"]["measurement_runs"] = 10
+    with pytest.raises(ValueError, match="same benchmark environment and workload"):
+        build_comparison_report([reference, candidate], reference_experiment_id="lstm")
 
 
 def test_evaluation_excludes_silent_stft_window_and_keeps_diagnostics(tmp_path) -> None:

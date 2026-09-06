@@ -86,7 +86,9 @@ def build_phase_commands(
     python = sys.executable
 
     if phase == "smoke":
-        selected = [run for run in runs if run["target"] == experiment["smoke"]["target"]]
+        selected = [
+            run for run in runs if run["target"] == experiment["smoke"]["target"]
+        ]
         checkpoint_root = _repo_path(paths["smoke_checkpoint_root"], repo_root)
         return [
             ExperimentCommand(
@@ -113,9 +115,10 @@ def build_phase_commands(
         checkpoint_root = _repo_path(paths["checkpoint_root"], repo_root)
         commands = []
         for run in runs:
-            if _completed_training_epochs(experiment, run["id"]) >= experiment[
-                "training"
-            ]["epochs"]:
+            if (
+                _completed_training_epochs(experiment, run["id"])
+                >= experiment["training"]["epochs"]
+            ):
                 continue
             argv = [
                 python,
@@ -136,7 +139,9 @@ def build_phase_commands(
 
     results_root = _repo_path(paths["results_root"], repo_root)
     if phase == "benchmark-initial":
-        selected = [run for run in runs if run["target"] == experiment["smoke"]["target"]]
+        selected = [
+            run for run in runs if run["target"] == experiment["smoke"]["target"]
+        ]
         return [
             ExperimentCommand(
                 f"initialized-{run['model_id']}",
@@ -198,6 +203,11 @@ def build_phase_commands(
         commands = []
         for target in experiment["targets"]:
             target_runs = [run for run in runs if run["target"] == target["id"]]
+            references = [run for run in target_runs if run["model_type"] == "lstm"]
+            if len(references) != 1:
+                raise ValueError(
+                    f"Target {target['id']} must have exactly one LSTM reference run"
+                )
             result_paths = [
                 str(results_root / "evaluations" / run["id"] / "evaluation.json")
                 for run in target_runs
@@ -209,6 +219,8 @@ def build_phase_commands(
                         python,
                         str(repo_root / "scripts/compare_evaluations.py"),
                         *result_paths,
+                        "--reference-experiment-id",
+                        str(references[0]["id"]),
                         "--output-dir",
                         str(results_root / "comparisons" / target["id"]),
                     ),
@@ -282,9 +294,11 @@ def execute_phase(
             print(f"Skipping completed {command.run_id}")
             continue
         if previous.get("status") == "completed" and not rerun_completed:
-            if phase != "train" or _completed_training_epochs(
-                experiment, command.run_id
-            ) >= experiment["training"]["epochs"]:
+            if (
+                phase != "train"
+                or _completed_training_epochs(experiment, command.run_id)
+                >= experiment["training"]["epochs"]
+            ):
                 print(f"Skipping completed {command.run_id}")
                 continue
             print(f"Resuming incomplete {command.run_id}")

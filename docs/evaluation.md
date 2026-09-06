@@ -102,13 +102,16 @@ Compare results from the same dataset segment:
 python scripts/compare_evaluations.py \
   results/lstm/evaluation.json \
   results/gru/evaluation.json \
+  --reference-experiment-id lstm-run-id \
   --output-dir results/comparison \
   --size-tolerance 1.35
 ```
 
-The command writes `comparison.json` and `comparison.md`. It preserves metrics, model sizes, sources, listening samples, and linked benchmark measurements.
+The command writes schema-`1.2` `comparison.json` and `comparison.md`. `--reference-experiment-id` is required and must identify exactly one of the supplied results. It preserves raw metrics, model sizes, sources, listening samples, and linked benchmark measurements.
 
-The size tolerance groups models by measured parameter count. The report does not select a winner or apply a regression policy.
+The report contains separate quality/model and CPU tables. ESR, MSE, corrected MR-STFT, parameter count, offline RTF, and block p95 time include the raw value plus `candidate / LSTM-40` and `(candidate / LSTM-40 - 1) * 100`. For these lower-is-better measures, a ratio below `1.0x` is an improvement. A missing or zero reference produces `null` in JSON and `N/A` in Markdown. Correlation and model-state bytes remain raw; process peak RSS is not a model-memory comparison. Comparisons reject mismatched benchmark environments or workloads and do not average ratios across targets.
+
+The CPU table retains 64, 128, 256, and 512-sample p95 compute time, deadline, and misses. The 128-sample case is the main discussion point. Block measurements cover stateful model-forward compute only; they exclude audio-interface latency, buffering, operating-system scheduling, and device round-trip. A zero-miss row met the measured compute deadline, which is not a hard real-time guarantee.
 
 ## Benchmark inference
 
