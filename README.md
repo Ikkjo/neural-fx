@@ -70,6 +70,8 @@ One epoch checks the workflow. It does not produce a useful amplifier or effect 
 
 The shipped WaveNet configs enable `torch.compile`. This default improved warmed training time by about 20% on the measured RTX 3050 workload. Results can differ on other hardware.
 
+The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model for `ds1_gain_75`, `tsmini_gain_75`, `pearl_clean_sm57`, and `full_rig`. The [NM course comparison section](docs/evaluation.md#nm-course-comparison) explains the roles of the GRU and WaveNet alternatives and links the saved local evidence.
+
 ## Documentation
 
 - [Setup](docs/setup.md): development tools, ONNX dependencies, CUDA, and environment checks

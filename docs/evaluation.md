@@ -46,6 +46,35 @@ The metric mask uses this precedence:
 
 Set `burn_in_samples` explicitly when several models must use one metric window. Listening files retain the complete aligned segment.
 
+## NM course comparison
+
+The four-device NM comparison uses `lstm_7k` (LSTM-40), a single-layer LSTM with 40 hidden units, as the reference model for `ds1_gain_75`, `tsmini_gain_75`, `pearl_clean_sm57`, and `full_rig`. The [gear comparison experiment](../configs/experiments/gear_comparison_44100/experiment.yaml) defines the shared data, training, evaluation, and benchmark settings.
+
+| Model and config | Architecture | Parameters | Role |
+| --- | --- | ---: | --- |
+| LSTM-40, [`lstm_7k.yaml`](../configs/models/lstm/lstm_7k.yaml) | One LSTM layer with 40 hidden units, scalar input and linear scalar output, an input-to-output skip connection, and no convolution | 6,921 | NM reference for all four targets |
+| GRU-46, [`gru_7k.yaml`](../configs/models/gru/gru_7k.yaml) | One GRU layer with 46 hidden units, scalar input and linear scalar output, an input-to-output skip connection, and no convolution | 6,809 | Approximately parameter-matched alternative |
+| WaveNet, [`wavenet_12k.yaml`](../configs/models/wavenet/wavenet_12k.yaml) | Causal dilated convolutional network | 12,129 | Larger convolutional alternative |
+
+The 40-unit LSTM size follows the architecture size documented by [GuitarML Proteus](https://github.com/GuitarML/Proteus/blob/main/README.md). That source supports the hidden-size choice only. This project uses its own implementation, data, training procedure, and trained checkpoints. GRU-46 matches the LSTM parameter count approximately, while WaveNet has a larger parameter budget. The comparison does not require either alternative to outperform the reference model.
+
+The saved comparison files are ignored local artifacts. They exist in this working tree and are absent from a public clone.
+
+| Target | Local-only comparison |
+| --- | --- |
+| `ds1_gain_75` | [`local/gear_comparison_44100/results/comparisons/ds1_gain_75/comparison.md`](../local/gear_comparison_44100/results/comparisons/ds1_gain_75/comparison.md) |
+| `tsmini_gain_75` | [`local/gear_comparison_44100/results/comparisons/tsmini_gain_75/comparison.md`](../local/gear_comparison_44100/results/comparisons/tsmini_gain_75/comparison.md) |
+| `pearl_clean_sm57` | [`local/gear_comparison_44100/results/comparisons/pearl_clean_sm57/comparison.md`](../local/gear_comparison_44100/results/comparisons/pearl_clean_sm57/comparison.md) |
+| `full_rig` | [`local/gear_comparison_44100/results/comparisons/full_rig/comparison.md`](../local/gear_comparison_44100/results/comparisons/full_rig/comparison.md) |
+
+The saved rows retain their measured ESR ranking. Naming LSTM-40 as the reference does not change the ranking or any reported result.
+
+Use this caption for the four-device comparison:
+
+> Four-device model comparison using LSTM-40 as the reference architecture. GRU-46 has approximately the same parameter count; WaveNet is larger. Rows retain their measured ESR ranking.
+
+The NM reference identifies the architecture used as the comparison point for the four-device quality and runtime experiment. The TAMU baseline identifies a previously accepted artifact in a same-device model-version monitoring comparison. These roles are separate. The TAMU baseline does not replace the NM reference architecture.
+
 ## Compare quality results
 
 Compare results from the same dataset segment:
