@@ -70,7 +70,7 @@ One epoch checks the workflow. It does not produce a useful amplifier or effect 
 
 The shipped WaveNet configs enable `torch.compile`. This default improved warmed training time by about 20% on the measured RTX 3050 workload. Results can differ on other hardware.
 
-The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model for `ds1_gain_75`, `tsmini_gain_75`, `pearl_clean_sm57`, and `full_rig`. The [NM course comparison section](docs/evaluation.md#nm-course-comparison) explains the roles of the GRU and WaveNet alternatives and links the saved local evidence.
+The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model for `ds1_gain_75`, `tsmini_gain_75`, `pearl_clean_sm57`, and `full_rig`. The [NM course comparison section](docs/evaluation.md#nm-course-comparison) explains the roles of the GRU and WaveNet alternatives. Final results, selected checkpoints, and listening WAVs are in the [evidence package](docs/reproducibility.md).
 
 ## Documentation
 
@@ -79,6 +79,7 @@ The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model fo
 - [Inference and export](docs/inference-and-export.md): file and streaming inference, artifact loading, and export support
 - [Evaluation](docs/evaluation.md): controlled quality evaluation and inference benchmarks
 - [Offline monitoring](docs/monitoring.md): repeatable checks for checkpoints and TorchScript artifacts
+- [Final experiment evidence](docs/reproducibility.md): published results, checkpoints, listening WAVs, and rerun instructions
 - [S4D architecture decision](docs/decisions/ssm-architecture.md): the accepted state-space model design
 
 ## Development checks

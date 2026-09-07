@@ -1,0 +1,321 @@
+{
+  "schema_version": "1.1",
+  "created_at": "2026-09-06T10:50:47.073510+00:00",
+  "experiment_id": "gear_comparison_44100_full_rig_wavenet_12k_seed42",
+  "run_kind": "final",
+  "sources": {
+    "manifest": "configs/experiments/gear_comparison_44100/evaluations/full_rig/wavenet_12k.yaml",
+    "config": "configs/experiments/gear_comparison_44100/runs/full_rig/wavenet_12k.yaml",
+    "config_source": "explicit_file",
+    "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_wavenet_12k_seed42/best.ckpt"
+  },
+  "model": {
+    "name": "gear_comparison_44100_full_rig_wavenet_12k_seed42",
+    "type": "wavenet",
+    "trainable_parameters": 12129,
+    "checkpoint_policy": "best"
+  },
+  "checkpoint": {
+    "epoch": 85,
+    "global_step": 20468,
+    "monitor": "val_loss",
+    "monitor_value": 0.014879699796438217
+  },
+  "training": {
+    "seed": 42,
+    "epochs": 100,
+    "deterministic": true,
+    "selection_metric": "val_loss",
+    "early_stopping": false
+  },
+  "inference": {
+    "chunk_size": 65536,
+    "chunks": 60,
+    "state_reset_count": 1
+  },
+  "dataset": {
+    "input_audio": "private-curated-dataset/full_rig/data/test/input.wav",
+    "target_audio": "private-curated-dataset/full_rig/data/test/target.wav",
+    "split": "test",
+    "start_sample": 0,
+    "num_samples": 3907584,
+    "latency_samples": 0,
+    "preparation_delay_samples": -41,
+    "normalization": "none",
+    "metric_mask_first": 4096,
+    "evaluated_samples": 3907584,
+    "mask_first": 4096,
+    "esr_mode": "nam",
+    "esr_pre_emphasis": null,
+    "configured_loss_mask_first": 0,
+    "metric_samples": 3903488,
+    "stft_window_starts": [
+      0,
+      419020,
+      838041,
+      1257062,
+      1676083,
+      2095104,
+      2514125,
+      2933146,
+      3352167,
+      3771188
+    ],
+    "stft_window_samples": 132300,
+    "stft_window_values": [
+      0.686751127243042,
+      0.6806395649909973,
+      0.643939197063446,
+      0.869112491607666,
+      0.5846447348594666,
+      0.5656836628913879,
+      0.57950758934021,
+      0.5691917538642883,
+      1.2520462274551392,
+      null
+    ],
+    "stft_windows": [
+      {
+        "start_sample": 0,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.686751127243042,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00013283923908602446,
+        "prediction_rms": 0.0657070204615593,
+        "prediction_abs_peak": 0.2982383668422699
+      },
+      {
+        "start_sample": 419020,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.6806395649909973,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00012435976532287896,
+        "prediction_rms": 0.06589578837156296,
+        "prediction_abs_peak": 0.27606597542762756
+      },
+      {
+        "start_sample": 838041,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.643939197063446,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00011203813483007252,
+        "prediction_rms": 0.08507581055164337,
+        "prediction_abs_peak": 0.37006431818008423
+      },
+      {
+        "start_sample": 1257062,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.869112491607666,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 7.602051482535899e-05,
+        "prediction_rms": 0.07526614516973495,
+        "prediction_abs_peak": 0.341156542301178
+      },
+      {
+        "start_sample": 1676083,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.5846447348594666,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00014323287177830935,
+        "prediction_rms": 0.09040330350399017,
+        "prediction_abs_peak": 0.33406198024749756
+      },
+      {
+        "start_sample": 2095104,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.5656836628913879,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0001213403302244842,
+        "prediction_rms": 0.10140108317136765,
+        "prediction_abs_peak": 0.3620379865169525
+      },
+      {
+        "start_sample": 2514125,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.57950758934021,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00015953822003211826,
+        "prediction_rms": 0.1018395647406578,
+        "prediction_abs_peak": 0.3260050415992737
+      },
+      {
+        "start_sample": 2933146,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.5691917538642883,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00012679424253292382,
+        "prediction_rms": 0.09617644548416138,
+        "prediction_abs_peak": 0.32999154925346375
+      },
+      {
+        "start_sample": 3352167,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 1.2520462274551392,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00013443100033327937,
+        "prediction_rms": 0.08413936197757721,
+        "prediction_abs_peak": 0.3234996497631073
+      },
+      {
+        "start_sample": 3771188,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": null,
+        "digital_silence": true,
+        "relative_score_status": "excluded",
+        "mse": 7.459564699274779e-08,
+        "prediction_rms": 0.0002731220447458327,
+        "prediction_abs_peak": 0.0002731220447458327
+      }
+    ],
+    "stft_scored_count": 9,
+    "stft_excluded_count": 1,
+    "scoring_diagnostics": {
+      "digital_silence": false,
+      "relative_score_status": "eligible",
+      "mse": 0.00010552358435234055,
+      "prediction_rms": 0.08025305718183517,
+      "prediction_abs_peak": 0.37351661920547485
+    },
+    "silence_policy": {
+      "id": "digital_silence_v1",
+      "target_rule": "every target sample equals exactly zero",
+      "unavailable_relative_metrics": [
+        "esr",
+        "multi_resolution_stft_distance"
+      ],
+      "relative_aggregation": "mean of eligible scoring segments",
+      "no_eligible_relative_score": null,
+      "stft": {
+        "mode": "legacy",
+        "fft_sizes": [
+          512,
+          1024,
+          2048
+        ],
+        "hop_sizes": [
+          128,
+          256,
+          512
+        ],
+        "win_sizes": [
+          512,
+          1024,
+          2048
+        ]
+      }
+    },
+    "sample_rate": 44100
+  },
+  "metrics": {
+    "esr": 0.01610492542386055,
+    "mse": 0.00010552358435234055,
+    "correlation": 0.9920280547110366,
+    "multi_resolution_stft_distance": 0.7146129277017381
+  },
+  "performance": {
+    "result_path": "artifacts/gear_comparison_44100/benchmarks/gear_comparison_44100_full_rig_wavenet_12k_seed42.json",
+    "runtime": {
+      "python_version": "3.11.15",
+      "torch_version": "2.11.0+cu130",
+      "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+      "device": "cpu",
+      "device_name": "13th Gen Intel(R) Core(TM) i5-13400F",
+      "dtype": "float32",
+      "torch_num_threads": 1
+    },
+    "workload": {
+      "sample_rate": 44100,
+      "batch_size": 1,
+      "input_channels": 1,
+      "offline_samples": 44100,
+      "block_sizes": [
+        64,
+        128,
+        256,
+        512
+      ],
+      "warmup_runs": 3,
+      "measurement_runs": 20,
+      "seed": 42
+    },
+    "offline": {
+      "runs": 20,
+      "median_ms": 363.1635775,
+      "p95_ms": 385.08644385,
+      "min_ms": 335.676574,
+      "max_ms": 388.164137,
+      "throughput_samples_per_second": 121432.88240407313,
+      "real_time_factor": 0.3631635775
+    },
+    "blocks": [
+      {
+        "runs": 20,
+        "median_ms": 2.727591,
+        "p95_ms": 2.8391493,
+        "min_ms": 2.663266,
+        "max_ms": 2.931818,
+        "throughput_samples_per_second": 23463.92842621933,
+        "real_time_factor": 1.8794806734375,
+        "block_size": 64,
+        "deadline_ms": 1.4512471655328798,
+        "deadline_misses": 20
+      },
+      {
+        "runs": 20,
+        "median_ms": 3.1997655,
+        "p95_ms": 3.43926495,
+        "min_ms": 3.109588,
+        "max_ms": 3.447453,
+        "throughput_samples_per_second": 40002.931464821406,
+        "real_time_factor": 1.102419207421875,
+        "block_size": 128,
+        "deadline_ms": 2.9024943310657596,
+        "deadline_misses": 20
+      },
+      {
+        "runs": 20,
+        "median_ms": 4.3871345,
+        "p95_ms": 4.48965285,
+        "min_ms": 4.352109,
+        "max_ms": 4.490353,
+        "throughput_samples_per_second": 58352.43938839806,
+        "real_time_factor": 0.7557524666015626,
+        "block_size": 256,
+        "deadline_ms": 5.804988662131519,
+        "deadline_misses": 0
+      },
+      {
+        "runs": 20,
+        "median_ms": 6.328704,
+        "p95_ms": 6.49868905,
+        "min_ms": 6.275722,
+        "max_ms": 6.502376,
+        "throughput_samples_per_second": 80901.23981150011,
+        "real_time_factor": 0.545109075,
+        "block_size": 512,
+        "deadline_ms": 11.609977324263038,
+        "deadline_misses": 0
+      }
+    ],
+    "memory": {
+      "model_state_bytes": 48516,
+      "process_peak_rss_bytes": 686645248,
+      "process_peak_rss_note": "Process high-water RSS; run one model per CLI process for comparable CPU results."
+    }
+  },
+  "artifacts": {
+    "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/input.wav",
+    "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/target.wav",
+    "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/prediction.wav"
+  },
+  "notes": null
+}

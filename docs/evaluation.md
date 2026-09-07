@@ -58,14 +58,14 @@ The four-device NM comparison uses `lstm_7k` (LSTM-40), a single-layer LSTM with
 
 The 40-unit LSTM size follows the architecture size documented by [GuitarML Proteus](https://github.com/GuitarML/Proteus/blob/main/README.md). That source supports the hidden-size choice only. This project uses its own implementation, data, training procedure, and trained checkpoints. GRU-46 matches the LSTM parameter count approximately, while WaveNet has a larger parameter budget. The comparison does not require either alternative to outperform the reference model.
 
-The saved comparison files are ignored local artifacts. They exist in this working tree and are absent from a public clone.
+The final comparison files and their associated listening WAVs are published in the repository evidence package. Retrieve the WAVs with Git LFS as described in the [reproducibility guide](reproducibility.md).
 
-| Target | Local-only comparison |
-| --- | --- |
-| `ds1_gain_75` | [`local/gear_comparison_44100/results/comparisons/ds1_gain_75/comparison.md`](../local/gear_comparison_44100/results/comparisons/ds1_gain_75/comparison.md) |
-| `tsmini_gain_75` | [`local/gear_comparison_44100/results/comparisons/tsmini_gain_75/comparison.md`](../local/gear_comparison_44100/results/comparisons/tsmini_gain_75/comparison.md) |
-| `pearl_clean_sm57` | [`local/gear_comparison_44100/results/comparisons/pearl_clean_sm57/comparison.md`](../local/gear_comparison_44100/results/comparisons/pearl_clean_sm57/comparison.md) |
-| `full_rig` | [`local/gear_comparison_44100/results/comparisons/full_rig/comparison.md`](../local/gear_comparison_44100/results/comparisons/full_rig/comparison.md) |
+| Target | Comparison | Listening WAVs |
+| --- | --- | --- |
+| `ds1_gain_75` | [`comparison`](../artifacts/gear_comparison_44100/comparisons/ds1_gain_75/comparison.md) | [`evaluations`](../artifacts/gear_comparison_44100/evaluations/) |
+| `tsmini_gain_75` | [`comparison`](../artifacts/gear_comparison_44100/comparisons/tsmini_gain_75/comparison.md) | [`evaluations`](../artifacts/gear_comparison_44100/evaluations/) |
+| `pearl_clean_sm57` | [`comparison`](../artifacts/gear_comparison_44100/comparisons/pearl_clean_sm57/comparison.md) | [`evaluations`](../artifacts/gear_comparison_44100/evaluations/) |
+| `full_rig` | [`comparison`](../artifacts/gear_comparison_44100/comparisons/full_rig/comparison.md) | [`evaluations`](../artifacts/gear_comparison_44100/evaluations/) |
 
 The saved rows retain their measured ESR ranking. Naming LSTM-40 as the reference does not change the ranking or any reported result.
 

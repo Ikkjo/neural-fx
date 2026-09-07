@@ -58,7 +58,7 @@ The version 1.1 report records:
 
 - Suite and audio fingerprints
 - Artifact and config hashes
-- Runtime and device identity
+- Runtime, device identity, and PyTorch thread count
 - Preflight results and warnings
 - Per-case ESR, MSE, MR-STFT, latency, and real-time factor
 - Digital-silence status, absolute MSE, prediction RMS/peak, and eligible/excluded relative-score counts
@@ -117,3 +117,7 @@ The policy rejects invalid or incomparable reports, output-contract failures, an
 The example is a controlled rollback failure: it compares the accepted DS-1 LSTM-40 checkpoint with a preserved older LSTM-nano artifact. They are both LSTM-family artifacts, but differ in capacity and training/preparation recipe. Do not attribute a regression to a single difference. On rejection, retain the accepted baseline, do not promote the candidate, inspect the recorded version/config differences, correct the candidate, and rerun the same suite.
 
 This is offline fixed-suite artifact monitoring, not production drift detection. Process RSS is whole-process high-water memory, checkpoint size can include training state, and latency is comparable only for matching runtime identity, inference category, chunk size, and workload.
+
+## Published evidence
+
+The final four-target reports are under [`monitoring/gear_comparison_44100/reports`](../monitoring/gear_comparison_44100/reports/). The selected checkpoints, result files, and the controlled rollback reports are in the [final evidence package](reproducibility.md). The rollback comparison remains a controlled failure example, not a deployment history.

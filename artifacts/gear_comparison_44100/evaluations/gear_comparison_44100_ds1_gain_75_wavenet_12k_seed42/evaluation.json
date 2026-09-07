@@ -1,0 +1,321 @@
+{
+  "schema_version": "1.1",
+  "created_at": "2026-09-06T10:48:09.774986+00:00",
+  "experiment_id": "gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42",
+  "run_kind": "final",
+  "sources": {
+    "manifest": "configs/experiments/gear_comparison_44100/evaluations/ds1_gain_75/wavenet_12k.yaml",
+    "config": "configs/experiments/gear_comparison_44100/runs/ds1_gain_75/wavenet_12k.yaml",
+    "config_source": "explicit_file",
+    "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42/best.ckpt"
+  },
+  "model": {
+    "name": "gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42",
+    "type": "wavenet",
+    "trainable_parameters": 12129,
+    "checkpoint_policy": "best"
+  },
+  "checkpoint": {
+    "epoch": 92,
+    "global_step": 22134,
+    "monitor": "val_loss",
+    "monitor_value": 0.002572245430201292
+  },
+  "training": {
+    "seed": 42,
+    "epochs": 100,
+    "deterministic": true,
+    "selection_metric": "val_loss",
+    "early_stopping": false
+  },
+  "inference": {
+    "chunk_size": 65536,
+    "chunks": 60,
+    "state_reset_count": 1
+  },
+  "dataset": {
+    "input_audio": "private-curated-dataset/ds1_gain_75/data/test/input.wav",
+    "target_audio": "private-curated-dataset/ds1_gain_75/data/test/target.wav",
+    "split": "test",
+    "start_sample": 0,
+    "num_samples": 3907584,
+    "latency_samples": 0,
+    "preparation_delay_samples": -41,
+    "normalization": "none",
+    "metric_mask_first": 4096,
+    "evaluated_samples": 3907584,
+    "mask_first": 4096,
+    "esr_mode": "nam",
+    "esr_pre_emphasis": null,
+    "configured_loss_mask_first": 0,
+    "metric_samples": 3903488,
+    "stft_window_starts": [
+      0,
+      419020,
+      838041,
+      1257062,
+      1676083,
+      2095104,
+      2514125,
+      2933146,
+      3352167,
+      3771188
+    ],
+    "stft_window_samples": 132300,
+    "stft_window_values": [
+      0.3871183395385742,
+      0.39105257391929626,
+      0.37150898575782776,
+      0.5011429190635681,
+      0.28702712059020996,
+      0.30892977118492126,
+      0.3422694206237793,
+      0.3343118131160736,
+      1.0279018878936768,
+      null
+    ],
+    "stft_windows": [
+      {
+        "start_sample": 0,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.3871183395385742,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 6.445054896175861e-05,
+        "prediction_rms": 0.12153547257184982,
+        "prediction_abs_peak": 0.31797805428504944
+      },
+      {
+        "start_sample": 419020,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.39105257391929626,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 6.099387974245474e-05,
+        "prediction_rms": 0.12491738796234131,
+        "prediction_abs_peak": 0.33792585134506226
+      },
+      {
+        "start_sample": 838041,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.37150898575782776,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 4.336252823122777e-05,
+        "prediction_rms": 0.1444070190191269,
+        "prediction_abs_peak": 0.33035409450531006
+      },
+      {
+        "start_sample": 1257062,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.5011429190635681,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 3.946029391954653e-05,
+        "prediction_rms": 0.115500807762146,
+        "prediction_abs_peak": 0.3316035866737366
+      },
+      {
+        "start_sample": 1676083,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.28702712059020996,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 4.2914762161672115e-05,
+        "prediction_rms": 0.15528999269008636,
+        "prediction_abs_peak": 0.3263736069202423
+      },
+      {
+        "start_sample": 2095104,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.30892977118492126,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 5.047977538197301e-05,
+        "prediction_rms": 0.1607181429862976,
+        "prediction_abs_peak": 0.3443354368209839
+      },
+      {
+        "start_sample": 2514125,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.3422694206237793,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 8.192510722437873e-05,
+        "prediction_rms": 0.17314626276493073,
+        "prediction_abs_peak": 0.3263736069202423
+      },
+      {
+        "start_sample": 2933146,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 0.3343118131160736,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 6.214580935193226e-05,
+        "prediction_rms": 0.17026464641094208,
+        "prediction_abs_peak": 0.3263736069202423
+      },
+      {
+        "start_sample": 3352167,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": 1.0279018878936768,
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 6.366445450112224e-05,
+        "prediction_rms": 0.14893807470798492,
+        "prediction_abs_peak": 0.3263736069202423
+      },
+      {
+        "start_sample": 3771188,
+        "num_samples": 132300,
+        "multi_resolution_stft_distance": null,
+        "digital_silence": true,
+        "relative_score_status": "excluded",
+        "mse": 1.554383999291531e-07,
+        "prediction_rms": 0.00039425675640814006,
+        "prediction_abs_peak": 0.00039431179175153375
+      }
+    ],
+    "stft_scored_count": 9,
+    "stft_excluded_count": 1,
+    "scoring_diagnostics": {
+      "digital_silence": false,
+      "relative_score_status": "eligible",
+      "mse": 4.976470518158749e-05,
+      "prediction_rms": 0.13796165585517883,
+      "prediction_abs_peak": 0.34747597575187683
+    },
+    "silence_policy": {
+      "id": "digital_silence_v1",
+      "target_rule": "every target sample equals exactly zero",
+      "unavailable_relative_metrics": [
+        "esr",
+        "multi_resolution_stft_distance"
+      ],
+      "relative_aggregation": "mean of eligible scoring segments",
+      "no_eligible_relative_score": null,
+      "stft": {
+        "mode": "legacy",
+        "fft_sizes": [
+          512,
+          1024,
+          2048
+        ],
+        "hop_sizes": [
+          128,
+          256,
+          512
+        ],
+        "win_sizes": [
+          512,
+          1024,
+          2048
+        ]
+      }
+    },
+    "sample_rate": 44100
+  },
+  "metrics": {
+    "esr": 0.002555840415880084,
+    "mse": 4.976470518158749e-05,
+    "correlation": 0.9988404492204032,
+    "multi_resolution_stft_distance": 0.4390292035208808
+  },
+  "performance": {
+    "result_path": "artifacts/gear_comparison_44100/benchmarks/gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42.json",
+    "runtime": {
+      "python_version": "3.11.15",
+      "torch_version": "2.11.0+cu130",
+      "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+      "device": "cpu",
+      "device_name": "13th Gen Intel(R) Core(TM) i5-13400F",
+      "dtype": "float32",
+      "torch_num_threads": 1
+    },
+    "workload": {
+      "sample_rate": 44100,
+      "batch_size": 1,
+      "input_channels": 1,
+      "offline_samples": 44100,
+      "block_sizes": [
+        64,
+        128,
+        256,
+        512
+      ],
+      "warmup_runs": 3,
+      "measurement_runs": 20,
+      "seed": 42
+    },
+    "offline": {
+      "runs": 20,
+      "median_ms": 379.8338875,
+      "p95_ms": 383.72208854999997,
+      "min_ms": 352.854786,
+      "max_ms": 384.38423,
+      "throughput_samples_per_second": 116103.38479870361,
+      "real_time_factor": 0.3798338875
+    },
+    "blocks": [
+      {
+        "runs": 20,
+        "median_ms": 2.9504140000000003,
+        "p95_ms": 2.9696800000000003,
+        "min_ms": 2.913719,
+        "max_ms": 3.015793,
+        "throughput_samples_per_second": 21691.871039115187,
+        "real_time_factor": 2.033019646875,
+        "block_size": 64,
+        "deadline_ms": 1.4512471655328798,
+        "deadline_misses": 20
+      },
+      {
+        "runs": 20,
+        "median_ms": 3.4641265,
+        "p95_ms": 3.4806395,
+        "min_ms": 3.433605,
+        "max_ms": 3.481656,
+        "throughput_samples_per_second": 36950.15179151223,
+        "real_time_factor": 1.193499833203125,
+        "block_size": 128,
+        "deadline_ms": 2.9024943310657596,
+        "deadline_misses": 20
+      },
+      {
+        "runs": 20,
+        "median_ms": 4.4890825,
+        "p95_ms": 4.5105708,
+        "min_ms": 4.460282,
+        "max_ms": 4.521929,
+        "throughput_samples_per_second": 57027.243317537606,
+        "real_time_factor": 0.7733146025390626,
+        "block_size": 256,
+        "deadline_ms": 5.804988662131519,
+        "deadline_misses": 0
+      },
+      {
+        "runs": 20,
+        "median_ms": 5.988618,
+        "p95_ms": 6.59004115,
+        "min_ms": 5.940379,
+        "max_ms": 6.981615,
+        "throughput_samples_per_second": 85495.5183316084,
+        "real_time_factor": 0.515816511328125,
+        "block_size": 512,
+        "deadline_ms": 11.609977324263038,
+        "deadline_misses": 0
+      }
+    ],
+    "memory": {
+      "model_state_bytes": 48516,
+      "process_peak_rss_bytes": 689815552,
+      "process_peak_rss_note": "Process high-water RSS; run one model per CLI process for comparable CPU results."
+    }
+  },
+  "artifacts": {
+    "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42/input.wav",
+    "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42/target.wav",
+    "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_ds1_gain_75_wavenet_12k_seed42/prediction.wav"
+  },
+  "notes": null
+}

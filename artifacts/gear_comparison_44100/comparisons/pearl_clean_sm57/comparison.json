@@ -1,0 +1,489 @@
+{
+  "schema_version": "1.2",
+  "created_at": "2026-09-06T10:51:38.671656+00:00",
+  "interpretation": "final_experiment",
+  "size_tolerance_ratio": 1.35,
+  "reference_experiment_id": "gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42",
+  "relative_value_convention": {
+    "reference": "candidate / LSTM-40 reference",
+    "percent_change": "(candidate / reference - 1) * 100",
+    "lower_is_better": [
+      "esr",
+      "mse",
+      "multi_resolution_stft_distance",
+      "trainable_parameters",
+      "offline_real_time_factor",
+      "block_p95_ms"
+    ],
+    "unavailable": "null when the reference or candidate value is unavailable, or the reference is zero"
+  },
+  "primary_metric": {
+    "name": "esr",
+    "direction": "lower_is_better",
+    "secondary_metrics": [
+      "mse",
+      "correlation",
+      "multi_resolution_stft_distance"
+    ]
+  },
+  "silence_policy": {
+    "id": "digital_silence_v1",
+    "target_rule": "every target sample equals exactly zero",
+    "unavailable_relative_metrics": [
+      "esr",
+      "multi_resolution_stft_distance"
+    ],
+    "relative_aggregation": "mean of eligible scoring segments",
+    "no_eligible_relative_score": null,
+    "stft": {
+      "mode": "legacy",
+      "fft_sizes": [
+        512,
+        1024,
+        2048
+      ],
+      "hop_sizes": [
+        128,
+        256,
+        512
+      ],
+      "win_sizes": [
+        512,
+        1024,
+        2048
+      ]
+    }
+  },
+  "size_groups": [
+    {
+      "id": "size-1",
+      "min_parameters": 6809,
+      "max_parameters": 6921,
+      "experiments": [
+        "gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42",
+        "gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42"
+      ]
+    },
+    {
+      "id": "size-2",
+      "min_parameters": 12129,
+      "max_parameters": 12129,
+      "experiments": [
+        "gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "experiment_id": "gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42",
+      "size_group": "size-2",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42",
+        "type": "wavenet",
+        "trainable_parameters": 12129,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.019712382927536964,
+        "mse": 0.00015444069867953658,
+        "correlation": 0.9904317782852172,
+        "multi_resolution_stft_distance": 1.5727826654911041
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00015444069867953658,
+        "prediction_rms": 0.08938156068325043,
+        "prediction_abs_peak": 0.4295872151851654
+      },
+      "stft_scored_count": 10,
+      "stft_excluded_count": 0,
+      "checkpoint": {
+        "epoch": 85,
+        "global_step": 20468,
+        "monitor": "val_loss",
+        "monitor_value": 0.012830873019993305
+      },
+      "offline_real_time_factor": 0.2727370765,
+      "block_128_p95_ms": 2.9191173,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 2.5551405000000003,
+          "p95_ms": 2.5879083,
+          "min_ms": 2.504671,
+          "max_ms": 2.596958,
+          "throughput_samples_per_second": 25047.546309097288,
+          "real_time_factor": 1.7606515007812502,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 20
+        },
+        {
+          "runs": 20,
+          "median_ms": 2.8737575,
+          "p95_ms": 2.9191173,
+          "min_ms": 2.845406,
+          "max_ms": 2.9207,
+          "throughput_samples_per_second": 44540.98858376185,
+          "real_time_factor": 0.990099263671875,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 6
+        },
+        {
+          "runs": 20,
+          "median_ms": 3.612674,
+          "p95_ms": 4.17154805,
+          "min_ms": 3.541961,
+          "max_ms": 4.293225,
+          "throughput_samples_per_second": 70861.63877504585,
+          "real_time_factor": 0.6223395445312501,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 5.5237739999999995,
+          "p95_ms": 6.0342547,
+          "min_ms": 5.010783,
+          "max_ms": 6.206674,
+          "throughput_samples_per_second": 92690.25126661592,
+          "real_time_factor": 0.47577819023437495,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 48516,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/pearl_clean_sm57/wavenet_12k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/pearl_clean_sm57/wavenet_12k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_wavenet_12k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 0.40713220029863784,
+          "percent_change": -59.286779970136216
+        },
+        "mse": {
+          "ratio": 0.407132203100625,
+          "percent_change": -59.2867796899375
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 0.9285421363349614,
+          "percent_change": -7.1457863665038595
+        },
+        "trainable_parameters": {
+          "ratio": 1.752492414390984,
+          "percent_change": 75.2492414390984
+        },
+        "offline_real_time_factor": {
+          "ratio": 6.888580735352385,
+          "percent_change": 588.8580735352385
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 23.42619626742657,
+            "percent_change": 2242.6196267426567
+          },
+          "128": {
+            "ratio": 19.99915937024705,
+            "percent_change": 1899.915937024705
+          },
+          "256": {
+            "ratio": 19.04502522643528,
+            "percent_change": 1804.5025226435278
+          },
+          "512": {
+            "ratio": 15.676041543133858,
+            "percent_change": 1467.6041543133858
+          }
+        }
+      },
+      "esr_rank": 1
+    },
+    {
+      "experiment_id": "gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42",
+      "size_group": "size-1",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42",
+        "type": "gru",
+        "trainable_parameters": 6809,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.041467249393463135,
+        "mse": 0.0003248836437705904,
+        "correlation": 0.9790594008036249,
+        "multi_resolution_stft_distance": 1.8309289813041687
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0003248836437705904,
+        "prediction_rms": 0.08624821901321411,
+        "prediction_abs_peak": 0.48520272970199585
+      },
+      "stft_scored_count": 10,
+      "stft_excluded_count": 0,
+      "checkpoint": {
+        "epoch": 68,
+        "global_step": 16422,
+        "monitor": "val_loss",
+        "monitor_value": 0.03903692588210106
+      },
+      "offline_real_time_factor": 0.3471283785,
+      "block_128_p95_ms": 1.0905429,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 0.5870635,
+          "p95_ms": 0.6124455,
+          "min_ms": 0.579154,
+          "max_ms": 0.616521,
+          "throughput_samples_per_second": 109017.16764881484,
+          "real_time_factor": 0.40452344296875,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 1.0420895,
+          "p95_ms": 1.0905429,
+          "min_ms": 1.024688,
+          "max_ms": 1.134564,
+          "throughput_samples_per_second": 122830.14078925084,
+          "real_time_factor": 0.359032398046875,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 2.1122965000000002,
+          "p95_ms": 2.2293515499999996,
+          "min_ms": 2.027503,
+          "max_ms": 2.229666,
+          "throughput_samples_per_second": 121195.1068422449,
+          "real_time_factor": 0.3638760767578125,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 4.0239505,
+          "p95_ms": 4.2009558,
+          "min_ms": 3.956339,
+          "max_ms": 4.255083,
+          "throughput_samples_per_second": 127238.14569786582,
+          "real_time_factor": 0.34659417392578123,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 27236,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/pearl_clean_sm57/gru_7k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/pearl_clean_sm57/gru_7k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 0.8564490933416778,
+          "percent_change": -14.355090665832215
+        },
+        "mse": {
+          "ratio": 0.8564490757332024,
+          "percent_change": -14.35509242667976
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 1.0809470024562546,
+          "percent_change": 8.094700245625464
+        },
+        "trainable_parameters": {
+          "ratio": 0.983817367432452,
+          "percent_change": -1.6182632567548039
+        },
+        "offline_real_time_factor": {
+          "ratio": 8.767498322983641,
+          "percent_change": 776.7498322983641
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 5.543963240931759,
+            "percent_change": 454.39632409317585
+          },
+          "128": {
+            "ratio": 7.471416533070251,
+            "percent_change": 647.1416533070251
+          },
+          "256": {
+            "ratio": 10.178009697944766,
+            "percent_change": 917.8009697944766
+          },
+          "512": {
+            "ratio": 10.913420283977926,
+            "percent_change": 991.3420283977925
+          }
+        }
+      },
+      "esr_rank": 2
+    },
+    {
+      "experiment_id": "gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42",
+      "size_group": "size-1",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42",
+        "type": "lstm",
+        "trainable_parameters": 6921,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.04841764643788338,
+        "mse": 0.0003793379582930356,
+        "correlation": 0.9761359506672018,
+        "multi_resolution_stft_distance": 1.6938193798065186
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0003793379582930356,
+        "prediction_rms": 0.08918987959623337,
+        "prediction_abs_peak": 0.464000940322876
+      },
+      "stft_scored_count": 10,
+      "stft_excluded_count": 0,
+      "checkpoint": {
+        "epoch": 75,
+        "global_step": 18088,
+        "monitor": "val_loss",
+        "monitor_value": 0.039955925196409225
+      },
+      "offline_real_time_factor": 0.03959263699999999,
+      "block_128_p95_ms": 0.145962,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 0.098637,
+          "p95_ms": 0.11047069999999999,
+          "min_ms": 0.094875,
+          "max_ms": 0.111035,
+          "throughput_samples_per_second": 648843.7401786348,
+          "real_time_factor": 0.06796705781250001,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.137912,
+          "p95_ms": 0.145962,
+          "min_ms": 0.134445,
+          "max_ms": 0.146494,
+          "throughput_samples_per_second": 928128.081675271,
+          "real_time_factor": 0.047514993750000005,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.2145685,
+          "p95_ms": 0.2190361,
+          "min_ms": 0.210714,
+          "max_ms": 0.223465,
+          "throughput_samples_per_second": 1193092.1826829193,
+          "real_time_factor": 0.0369627767578125,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.37016899999999997,
+          "p95_ms": 0.38493485,
+          "min_ms": 0.36632,
+          "max_ms": 0.38516,
+          "throughput_samples_per_second": 1383152.01975314,
+          "real_time_factor": 0.031883697070312494,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 27684,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/pearl_clean_sm57/lstm_7k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/pearl_clean_sm57/lstm_7k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_pearl_clean_sm57_lstm_7k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "mse": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "trainable_parameters": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "offline_real_time_factor": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "128": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "256": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "512": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          }
+        }
+      },
+      "esr_rank": 3
+    }
+  ]
+}

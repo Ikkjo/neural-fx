@@ -1,0 +1,489 @@
+{
+  "schema_version": "1.2",
+  "created_at": "2026-09-06T10:51:39.944052+00:00",
+  "interpretation": "final_experiment",
+  "size_tolerance_ratio": 1.35,
+  "reference_experiment_id": "gear_comparison_44100_full_rig_lstm_7k_seed42",
+  "relative_value_convention": {
+    "reference": "candidate / LSTM-40 reference",
+    "percent_change": "(candidate / reference - 1) * 100",
+    "lower_is_better": [
+      "esr",
+      "mse",
+      "multi_resolution_stft_distance",
+      "trainable_parameters",
+      "offline_real_time_factor",
+      "block_p95_ms"
+    ],
+    "unavailable": "null when the reference or candidate value is unavailable, or the reference is zero"
+  },
+  "primary_metric": {
+    "name": "esr",
+    "direction": "lower_is_better",
+    "secondary_metrics": [
+      "mse",
+      "correlation",
+      "multi_resolution_stft_distance"
+    ]
+  },
+  "silence_policy": {
+    "id": "digital_silence_v1",
+    "target_rule": "every target sample equals exactly zero",
+    "unavailable_relative_metrics": [
+      "esr",
+      "multi_resolution_stft_distance"
+    ],
+    "relative_aggregation": "mean of eligible scoring segments",
+    "no_eligible_relative_score": null,
+    "stft": {
+      "mode": "legacy",
+      "fft_sizes": [
+        512,
+        1024,
+        2048
+      ],
+      "hop_sizes": [
+        128,
+        256,
+        512
+      ],
+      "win_sizes": [
+        512,
+        1024,
+        2048
+      ]
+    }
+  },
+  "size_groups": [
+    {
+      "id": "size-1",
+      "min_parameters": 6809,
+      "max_parameters": 6921,
+      "experiments": [
+        "gear_comparison_44100_full_rig_gru_7k_seed42",
+        "gear_comparison_44100_full_rig_lstm_7k_seed42"
+      ]
+    },
+    {
+      "id": "size-2",
+      "min_parameters": 12129,
+      "max_parameters": 12129,
+      "experiments": [
+        "gear_comparison_44100_full_rig_wavenet_12k_seed42"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "experiment_id": "gear_comparison_44100_full_rig_wavenet_12k_seed42",
+      "size_group": "size-2",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_full_rig_wavenet_12k_seed42",
+        "type": "wavenet",
+        "trainable_parameters": 12129,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.01610492542386055,
+        "mse": 0.00010552358435234055,
+        "correlation": 0.9920280547110366,
+        "multi_resolution_stft_distance": 0.7146129277017381
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.00010552358435234055,
+        "prediction_rms": 0.08025305718183517,
+        "prediction_abs_peak": 0.37351661920547485
+      },
+      "stft_scored_count": 9,
+      "stft_excluded_count": 1,
+      "checkpoint": {
+        "epoch": 85,
+        "global_step": 20468,
+        "monitor": "val_loss",
+        "monitor_value": 0.014879699796438217
+      },
+      "offline_real_time_factor": 0.3631635775,
+      "block_128_p95_ms": 3.43926495,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 2.727591,
+          "p95_ms": 2.8391493,
+          "min_ms": 2.663266,
+          "max_ms": 2.931818,
+          "throughput_samples_per_second": 23463.92842621933,
+          "real_time_factor": 1.8794806734375,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 20
+        },
+        {
+          "runs": 20,
+          "median_ms": 3.1997655,
+          "p95_ms": 3.43926495,
+          "min_ms": 3.109588,
+          "max_ms": 3.447453,
+          "throughput_samples_per_second": 40002.931464821406,
+          "real_time_factor": 1.102419207421875,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 20
+        },
+        {
+          "runs": 20,
+          "median_ms": 4.3871345,
+          "p95_ms": 4.48965285,
+          "min_ms": 4.352109,
+          "max_ms": 4.490353,
+          "throughput_samples_per_second": 58352.43938839806,
+          "real_time_factor": 0.7557524666015626,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 6.328704,
+          "p95_ms": 6.49868905,
+          "min_ms": 6.275722,
+          "max_ms": 6.502376,
+          "throughput_samples_per_second": 80901.23981150011,
+          "real_time_factor": 0.545109075,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 48516,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/full_rig/wavenet_12k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/full_rig/wavenet_12k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_wavenet_12k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_wavenet_12k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 0.05250538057323278,
+          "percent_change": -94.74946194267673
+        },
+        "mse": {
+          "ratio": 0.052505379329703686,
+          "percent_change": -94.74946206702964
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 0.4524319504694849,
+          "percent_change": -54.75680495305151
+        },
+        "trainable_parameters": {
+          "ratio": 1.752492414390984,
+          "percent_change": 75.2492414390984
+        },
+        "offline_real_time_factor": {
+          "ratio": 8.427941025044841,
+          "percent_change": 742.7941025044842
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 24.39481695397879,
+            "percent_change": 2339.481695397879
+          },
+          "128": {
+            "ratio": 21.20735047241145,
+            "percent_change": 2020.735047241145
+          },
+          "256": {
+            "ratio": 18.446499167172718,
+            "percent_change": 1744.6499167172717
+          },
+          "512": {
+            "ratio": 14.797799760864859,
+            "percent_change": 1379.779976086486
+          }
+        }
+      },
+      "esr_rank": 1
+    },
+    {
+      "experiment_id": "gear_comparison_44100_full_rig_gru_7k_seed42",
+      "size_group": "size-1",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_full_rig_gru_7k_seed42",
+        "type": "gru",
+        "trainable_parameters": 6809,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.2923596501350403,
+        "mse": 0.0019156152848154306,
+        "correlation": 0.8426512654030458,
+        "multi_resolution_stft_distance": 1.4250793589486017
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.0019156152848154306,
+        "prediction_rms": 0.07199900597333908,
+        "prediction_abs_peak": 0.31631386280059814
+      },
+      "stft_scored_count": 9,
+      "stft_excluded_count": 1,
+      "checkpoint": {
+        "epoch": 76,
+        "global_step": 18326,
+        "monitor": "val_loss",
+        "monitor_value": 0.2853166162967682
+      },
+      "offline_real_time_factor": 0.36269438400000004,
+      "block_128_p95_ms": 1.16765415,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 0.5871999999999999,
+          "p95_ms": 0.5945077500000001,
+          "min_ms": 0.576415,
+          "max_ms": 0.616011,
+          "throughput_samples_per_second": 108991.82561307903,
+          "real_time_factor": 0.40461749999999996,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 1.150163,
+          "p95_ms": 1.16765415,
+          "min_ms": 1.123716,
+          "max_ms": 1.204194,
+          "throughput_samples_per_second": 111288.57388039782,
+          "real_time_factor": 0.39626709609375,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 2.2250199999999998,
+          "p95_ms": 2.2516127999999997,
+          "min_ms": 2.013949,
+          "max_ms": 2.260786,
+          "throughput_samples_per_second": 115055.14557172521,
+          "real_time_factor": 0.38329446093749997,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 4.3459345,
+          "p95_ms": 4.397572149999999,
+          "min_ms": 3.971113,
+          "max_ms": 4.402363,
+          "throughput_samples_per_second": 117811.25555389754,
+          "real_time_factor": 0.3743275614257813,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 27236,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/full_rig/gru_7k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/full_rig/gru_7k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_gru_7k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_gru_7k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_gru_7k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_gru_7k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 0.9531527958431106,
+          "percent_change": -4.684720415688936
+        },
+        "mse": {
+          "ratio": 0.9531528690607983,
+          "percent_change": -4.684713093920168
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 0.9022386930733256,
+          "percent_change": -9.77613069266744
+        },
+        "trainable_parameters": {
+          "ratio": 0.983817367432452,
+          "percent_change": -1.6182632567548039
+        },
+        "offline_real_time_factor": {
+          "ratio": 8.417052446474944,
+          "percent_change": 741.7052446474944
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 5.108187772644357,
+            "percent_change": 410.81877726443577
+          },
+          "128": {
+            "ratio": 7.200041622154084,
+            "percent_change": 620.0041622154084
+          },
+          "256": {
+            "ratio": 9.251132554713095,
+            "percent_change": 825.1132554713095
+          },
+          "512": {
+            "ratio": 10.013464501683758,
+            "percent_change": 901.3464501683759
+          }
+        }
+      },
+      "esr_rank": 2
+    },
+    {
+      "experiment_id": "gear_comparison_44100_full_rig_lstm_7k_seed42",
+      "size_group": "size-1",
+      "run_kind": "final",
+      "model": {
+        "name": "gear_comparison_44100_full_rig_lstm_7k_seed42",
+        "type": "lstm",
+        "trainable_parameters": 6921,
+        "checkpoint_policy": "best"
+      },
+      "metrics": {
+        "esr": 0.3067290484905243,
+        "mse": 0.002009767107665539,
+        "correlation": 0.8345723024293504,
+        "multi_resolution_stft_distance": 1.579492621951633
+      },
+      "diagnostics": {
+        "digital_silence": false,
+        "relative_score_status": "eligible",
+        "mse": 0.002009767107665539,
+        "prediction_rms": 0.07194000482559204,
+        "prediction_abs_peak": 0.3021829128265381
+      },
+      "stft_scored_count": 9,
+      "stft_excluded_count": 1,
+      "checkpoint": {
+        "epoch": 36,
+        "global_step": 8806,
+        "monitor": "val_loss",
+        "monitor_value": 0.29866650700569153
+      },
+      "offline_real_time_factor": 0.04309042700000001,
+      "block_128_p95_ms": 0.16217325000000002,
+      "blocks": [
+        {
+          "runs": 20,
+          "median_ms": 0.109018,
+          "p95_ms": 0.11638330000000001,
+          "min_ms": 0.105749,
+          "max_ms": 0.120455,
+          "throughput_samples_per_second": 587059.0177768809,
+          "real_time_factor": 0.075120215625,
+          "block_size": 64,
+          "deadline_ms": 1.4512471655328798,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.151059,
+          "p95_ms": 0.16217325000000002,
+          "min_ms": 0.147724,
+          "max_ms": 0.170082,
+          "throughput_samples_per_second": 847351.0350260495,
+          "real_time_factor": 0.05204454609375,
+          "block_size": 128,
+          "deadline_ms": 2.9024943310657596,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.23847,
+          "p95_ms": 0.2433878,
+          "min_ms": 0.235884,
+          "max_ms": 0.245569,
+          "throughput_samples_per_second": 1073510.2947959912,
+          "real_time_factor": 0.04108018359375,
+          "block_size": 256,
+          "deadline_ms": 5.804988662131519,
+          "deadline_misses": 0
+        },
+        {
+          "runs": 20,
+          "median_ms": 0.415231,
+          "p95_ms": 0.4391659,
+          "min_ms": 0.40681,
+          "max_ms": 0.439601,
+          "throughput_samples_per_second": 1233048.5922293856,
+          "real_time_factor": 0.0357650138671875,
+          "block_size": 512,
+          "deadline_ms": 11.609977324263038,
+          "deadline_misses": 0
+        }
+      ],
+      "model_state_bytes": 27684,
+      "sources": {
+        "manifest": "configs/experiments/gear_comparison_44100/evaluations/full_rig/lstm_7k.yaml",
+        "config": "configs/experiments/gear_comparison_44100/runs/full_rig/lstm_7k.yaml",
+        "config_source": "explicit_file",
+        "checkpoint": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_lstm_7k_seed42/best.ckpt"
+      },
+      "listening_samples": {
+        "input_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_lstm_7k_seed42/input.wav",
+        "target_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_lstm_7k_seed42/target.wav",
+        "prediction_audio": "artifacts/gear_comparison_44100/evaluations/gear_comparison_44100_full_rig_lstm_7k_seed42/prediction.wav"
+      },
+      "relative_to_reference": {
+        "esr": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "mse": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "multi_resolution_stft_distance": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "trainable_parameters": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "offline_real_time_factor": {
+          "ratio": 1.0,
+          "percent_change": 0.0
+        },
+        "block_p95_ms": {
+          "64": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "128": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "256": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          },
+          "512": {
+            "ratio": 1.0,
+            "percent_change": 0.0
+          }
+        }
+      },
+      "esr_rank": 3
+    }
+  ]
+}
