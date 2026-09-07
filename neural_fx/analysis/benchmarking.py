@@ -23,7 +23,7 @@ from ..models import BaseNeuralFXModel
 BENCHMARK_SCHEMA_VERSION = "1.0"
 
 
-def _cpu_name() -> str:
+def cpu_name() -> str:
     """Return the most specific CPU name available without extra dependencies."""
     processor = platform.processor().strip()
     machine = platform.machine().strip()
@@ -192,7 +192,7 @@ def benchmark_model(
         memory["cuda_peak_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
 
     device_name = (
-        torch.cuda.get_device_name(device) if device.type == "cuda" else _cpu_name()
+        torch.cuda.get_device_name(device) if device.type == "cuda" else cpu_name()
     )
     return {
         "schema_version": BENCHMARK_SCHEMA_VERSION,

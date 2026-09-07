@@ -15,6 +15,7 @@ import torch
 import torchaudio
 from torch import Tensor
 
+from ..analysis.benchmarking import cpu_name
 from ..data.audio import load_audio_pair
 from ..losses.audio_losses import MultiResolutionSTFTLoss
 from ..metrics import RELATIVE_METRICS, average_eligible, silence_policy_metadata
@@ -358,7 +359,7 @@ def monitor_artifact(
     device_name = (
         torch.cuda.get_device_name(resolved_device)
         if resolved_device.type == "cuda"
-        else platform.processor() or platform.machine()
+        else cpu_name()
     )
     warning_count = sum(
         not check.passed and check.severity == "warning"
@@ -403,6 +404,7 @@ def monitor_artifact(
             "device_class": resolved_device.type,
             "device_name": device_name,
             "dtype": "float32",
+            "torch_num_threads": torch.get_num_threads(),
         },
         workload={
             **manifest.settings_dict(),

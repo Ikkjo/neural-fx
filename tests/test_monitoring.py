@@ -318,6 +318,8 @@ def test_checkpoint_monitoring_produces_required_measurements(tmp_path: Path) ->
     assert report.cases[0].latency["full"]["runs"] == 3
     assert report.aggregate["metrics"]["artifact_size_bytes"] > 0
     assert report.suite["validation_passed"] is True
+    assert report.runtime["device_name"]
+    assert report.runtime["torch_num_threads"] == torch.get_num_threads()
 
 
 def test_silent_monitoring_keeps_absolute_diagnostics_and_nulls_relative_scores(

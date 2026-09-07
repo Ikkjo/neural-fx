@@ -7,8 +7,8 @@ import torch
 
 from neural_fx.analysis import benchmarking
 from neural_fx.analysis.benchmarking import (
-    _cpu_name,
     benchmark_model,
+    cpu_name,
     format_benchmark_table,
     load_benchmark_result,
     load_model_for_evaluation,
@@ -128,7 +128,7 @@ def test_cpu_name_uses_processor_procfs_then_machine(
     else:
         monkeypatch.setattr(benchmarking.Path, "read_text", lambda _: cpuinfo)
 
-    assert _cpu_name() == expected
+    assert cpu_name() == expected
 
 
 def test_model_loader_uses_checkpoint_embedded_config(tmp_path) -> None:
