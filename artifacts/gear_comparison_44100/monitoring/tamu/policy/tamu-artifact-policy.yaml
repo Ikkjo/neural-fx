@@ -1,0 +1,12 @@
+schema_version: "1.0"
+policy_id: "tamu-artifact-regression-v1"
+reject_thresholds:
+  esr: 0.10
+  multi_resolution_stft_distance: 0.10
+investigate_thresholds:
+  mse: 0.10
+  p95_latency_ms: 0.20
+  real_time_factor: 0.20
+  peak_memory_bytes: 0.20
+  artifact_size_bytes: 0.10
+response: "Retain the accepted baseline, do not promote the candidate, inspect version/config differences, correct the candidate, and rerun the same validation suite before reconsideration."

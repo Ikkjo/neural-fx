@@ -23,6 +23,8 @@ class AudioDataset(Dataset):
         random_segments: bool = False,
         transform: Callable[[Tensor, Tensor], tuple[Tensor, Tensor]] | None = None,
         latency_calibration: LatencyCalibration | None = None,
+        input_context: int = 0,
+        include_partial_segment: bool = False,
         *,
         _audio_pair: AudioPair | None = None,
     ):
@@ -36,6 +38,8 @@ class AudioDataset(Dataset):
             random_segments: If True, randomly sample segments instead of sequential.
             transform: Optional transform to apply to (input, target) pairs.
             latency_calibration: Optional latency calibration to apply.
+            input_context: Preceding input samples included without matching targets.
+            include_partial_segment: Include a shorter final sequential segment.
         """
         super().__init__()
         self.segment_length = segment_length
@@ -44,6 +48,8 @@ class AudioDataset(Dataset):
         self.random_segments = random_segments
         self.transform = transform
         self.latency_calibration = latency_calibration
+        self.input_context = input_context
+        self.include_partial_segment = include_partial_segment
 
         audio_pair = _audio_pair or load_audio_pair(
             input_path,
@@ -55,13 +61,16 @@ class AudioDataset(Dataset):
         self.input_audio = audio_pair.input_audio
         self.target_audio = audio_pair.target_audio
 
-        self.num_segments = self.input_audio.shape[-1] // segment_length
+        available = max(0, self.input_audio.shape[-1] - input_context)
+        self.num_segments = available // segment_length
+        if include_partial_segment and available % segment_length:
+            self.num_segments += 1
         if self.num_segments == 0:
             warnings.warn(
                 f"Audio length ({self.input_audio.shape[-1]}) is shorter than "
                 f"segment_length ({segment_length}). Creating empty dataset."
             )
-        self.total_length = self.num_segments * segment_length
+        self.total_length = min(available, self.num_segments * segment_length)
 
     def __len__(self) -> int:
         return self.num_segments
@@ -70,15 +79,17 @@ class AudioDataset(Dataset):
         if self.random_segments:
             # Random segment sampling
             max_start = self.input_audio.shape[-1] - self.segment_length
-            start = torch.randint(0, max_start + 1, (1,)).item()
+            target_start = torch.randint(
+                self.input_context, max_start + 1, (1,)
+            ).item()
         else:
             # Sequential segment sampling
-            start = idx * self.segment_length
+            target_start = self.input_context + idx * self.segment_length
 
-        end = start + self.segment_length
+        end = target_start + self.segment_length
 
-        x = self.input_audio[..., start:end]
-        y = self.target_audio[..., start:end]
+        x = self.input_audio[..., target_start - self.input_context : end]
+        y = self.target_audio[..., target_start:end]
 
         x = x.squeeze(0)
         y = y.squeeze(0)

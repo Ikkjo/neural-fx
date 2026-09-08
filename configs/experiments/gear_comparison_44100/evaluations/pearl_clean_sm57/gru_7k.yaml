@@ -1,0 +1,29 @@
+schema_version: '1.0'
+experiment_id: gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42
+run_kind: final
+inference_chunk_size: 65536
+esr_mode: nam
+burn_in_samples: 4096
+esr_pre_emphasis: null
+model:
+  type: gru
+  config: ../../runs/pearl_clean_sm57/gru_7k.yaml
+  checkpoint: ../../../../../local/gear_comparison_44100/checkpoints/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42/best.ckpt
+  checkpoint_policy: best
+  benchmark_result: ../../../../../local/gear_comparison_44100/results/benchmarks/final/gear_comparison_44100_pearl_clean_sm57_gru_7k_seed42.json
+dataset:
+  input_audio: ../../../../../local/gear_comparison_44100/data/pearl_clean_sm57/data/test/input.wav
+  target_audio: ../../../../../local/gear_comparison_44100/data/pearl_clean_sm57/data/test/target.wav
+  split: test
+  start_sample: 0
+  num_samples: 3907584
+  latency_samples: 0
+  preparation_delay_samples: -41
+  normalization: none
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 100
+  deterministic: true
+  selection_metric: val_loss
+  early_stopping: false

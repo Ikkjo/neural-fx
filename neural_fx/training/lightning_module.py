@@ -45,6 +45,13 @@ class NeuralFXModule(L.LightningModule):
         self.tbptt_config = config.training.tbptt
         self.burn_in = config.loss.mask_first
         self.loss_fn = self._build_loss(config.loss)
+        self.validation_loss_fn = (
+            self._build_loss(config.validation_loss)
+            if config.validation_loss is not None
+            else None
+        )
+        self._validation_predictions: list[Tensor] = []
+        self._validation_targets: list[Tensor] = []
 
         # Build augmentation transform if enabled
         self.transform: Callable[[Tensor, Tensor], tuple[Tensor, Tensor]] | None = None
@@ -85,6 +92,7 @@ class NeuralFXModule(L.LightningModule):
                 win_sizes=loss_config.stft.win_sizes,
                 sc_loss_weight=loss_config.stft.sc_weight,
                 mag_loss_weight=loss_config.stft.mag_weight,
+                mode=loss_config.stft.mode,
             )
 
         pre_emphasis = loss_config.pre_emphasis
@@ -103,6 +111,7 @@ class NeuralFXModule(L.LightningModule):
                         pred,
                         target,
                         pre_emphasis_coeff=pre_emphasis_coeff,
+                        mode=loss_config.esr_mode,
                     )
                 )
             if mse_weight > 0:
@@ -135,6 +144,9 @@ class NeuralFXModule(L.LightningModule):
 
         pred = self.model(x, reset_state=True)
 
+        if pred.shape[-1] != y.shape[-1]:
+            pred = pred[..., -y.shape[-1] :]
+
         if self.burn_in > 0:
             pred = pred[..., self.burn_in :]
             y = y[..., self.burn_in :]
@@ -150,8 +162,8 @@ class NeuralFXModule(L.LightningModule):
         segment_length = x.shape[-1]
         truncate = segment_length // 2
 
-        total_loss = torch.tensor(0.0, device=x.device)
-        total_samples = 0
+        predictions: list[Tensor] = []
+        targets: list[Tensor] = []
 
         for start in range(0, segment_length, truncate):
             end = min(start + truncate, segment_length)
@@ -169,26 +181,34 @@ class NeuralFXModule(L.LightningModule):
             if pred_seg.shape[-1] > effective_start:
                 pred_loss = pred_seg[..., effective_start:]
                 y_loss = y_seg[..., effective_start:]
-                loss = self.loss_fn(pred_loss, y_loss)
+                predictions.append(pred_loss)
+                targets.append(y_loss)
 
-                # Weight by number of effective samples in this segment
-                num_samples = pred_loss.numel()
-                total_loss = total_loss + loss * num_samples
-                total_samples += num_samples
-
-        if total_samples > 0:
-            avg_loss = total_loss / total_samples
-            self.log("train_loss", avg_loss, prog_bar=True)
-            return avg_loss
+        if predictions:
+            loss = self.loss_fn(
+                torch.cat(predictions, dim=-1), torch.cat(targets, dim=-1)
+            )
+            self.log("train_loss", loss, prog_bar=True)
+            return loss
         return torch.tensor(0.0, device=x.device)
 
-    def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
+    def on_validation_epoch_start(self) -> None:
+        self._validation_predictions.clear()
+        self._validation_targets.clear()
+
+    def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor | None:
         x, y = batch
         x = x.unsqueeze(1)
         y = y.unsqueeze(1)
 
-        self.model.reset_state()
+        if batch_idx == 0 or self.validation_loss_fn is None:
+            self.model.reset_state()
         pred = self.model(x)
+
+        if self.validation_loss_fn is not None:
+            self._validation_predictions.append(pred.detach())
+            self._validation_targets.append(y.detach())
+            return None
 
         if self.burn_in > 0:
             pred = pred[..., self.burn_in :]
@@ -198,18 +218,37 @@ class NeuralFXModule(L.LightningModule):
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
+    def on_validation_epoch_end(self) -> None:
+        if self.validation_loss_fn is None or not self._validation_predictions:
+            return
+        pred = torch.cat(self._validation_predictions, dim=-1)
+        target = torch.cat(self._validation_targets, dim=-1)
+        assert self.config.validation_loss is not None
+        mask_first = self.config.validation_loss.mask_first
+        loss = self.validation_loss_fn(
+            pred[..., mask_first:], target[..., mask_first:]
+        )
+        self.log("val_loss", loss, prog_bar=True)
+
     def configure_optimizers(
         self,
     ) -> tuple[list[torch.optim.Optimizer], list[torch.optim.lr_scheduler.LRScheduler]]:
         opt_type = self.config.optimizer.type.lower()
         lr = self.config.optimizer.lr
+        weight_decay = self.config.optimizer.weight_decay
 
         if opt_type == "adam":
-            optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+            optimizer = torch.optim.Adam(
+                self.parameters(), lr=lr, weight_decay=weight_decay
+            )
         elif opt_type == "adamw":
-            optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
+            optimizer = torch.optim.AdamW(
+                self.parameters(), lr=lr, weight_decay=weight_decay
+            )
         elif opt_type == "sgd":
-            optimizer = torch.optim.SGD(self.parameters(), lr=lr)
+            optimizer = torch.optim.SGD(
+                self.parameters(), lr=lr, weight_decay=weight_decay
+            )
         else:
             raise ValueError(f"Unknown optimizer: {opt_type}")
 
@@ -229,6 +268,9 @@ class NeuralFXModule(L.LightningModule):
 
     def _create_train_dataset(self) -> AudioDataset:
         """Create training dataset."""
+        input_context = 0
+        if self.config.training.use_receptive_field_context:
+            input_context = int(self.model.receptive_field) - 1
         return AudioDataset(
             input_path=self.config.data.train.input,
             target_path=self.config.data.train.target,
@@ -238,6 +280,7 @@ class NeuralFXModule(L.LightningModule):
             transform=self.transform,
             latency_calibration=self.train_latency,
             normalize=self.config.data.normalize,
+            input_context=input_context,
         )
 
     def _create_val_dataset(self) -> AudioDataset | None:
@@ -248,12 +291,16 @@ class NeuralFXModule(L.LightningModule):
         return AudioDataset(
             input_path=self.config.data.val.input,
             target_path=self.config.data.val.target,
-            segment_length=self.config.training.segment_length,
+            segment_length=(
+                self.config.training.validation_segment_length
+                or self.config.training.segment_length
+            ),
             sample_rate=self.config.sample_rate,
             random_segments=False,  # Sequential for validation
             transform=None,  # No augmentation for validation
             latency_calibration=self.val_latency,
             normalize=self.config.data.normalize,
+            include_partial_segment=self.validation_loss_fn is not None,
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -272,7 +319,11 @@ class NeuralFXModule(L.LightningModule):
             return None
         return DataLoader(
             dataset,
-            batch_size=self.config.training.batch_size,
+            batch_size=(
+                1
+                if self.validation_loss_fn is not None
+                else self.config.training.batch_size
+            ),
             shuffle=False,
             num_workers=self.config.training.num_workers,
             pin_memory=True,

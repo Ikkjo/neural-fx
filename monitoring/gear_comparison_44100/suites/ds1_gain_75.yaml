@@ -1,0 +1,37 @@
+schema_version: "1.0"
+suite_id: "gear-comparison-44100-ds1-gain-75-test"
+sample_rate: 44100
+channels: 1
+segment_length: 44100
+burn_in_samples: 4096
+inference_chunk_size: 8192
+latency_block_sizes: [64, 128, 256, 512]
+warmup_runs: 3
+measurement_runs: 20
+quality_metrics: [esr, mse, multi_resolution_stft_distance]
+esr_mode: nam
+esr_pre_emphasis: null
+clipping_threshold: 0.999
+max_abs: 1.0
+allow_target_full_scale: false
+cases:
+  - id: "early"
+    input: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/input.wav"
+    target: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/target.wav"
+    start_sample: 0
+    num_samples: 44100
+  - id: "first-middle"
+    input: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/input.wav"
+    target: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/target.wav"
+    start_sample: 926100
+    num_samples: 44100
+  - id: "second-middle"
+    input: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/input.wav"
+    target: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/target.wav"
+    start_sample: 1896300
+    num_samples: 44100
+  - id: "late"
+    input: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/input.wav"
+    target: "../../../local/gear_comparison_44100/data/ds1_gain_75/data/test/target.wav"
+    start_sample: 3395700
+    num_samples: 44100

@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "created_at": "2026-09-06T10:47:35.003579+00:00",
+  "model": {
+    "name": "gear_comparison_44100_full_rig_wavenet_12k_seed42",
+    "type": "wavenet",
+    "config_path": "configs/experiments/gear_comparison_44100/runs/full_rig/wavenet_12k.yaml",
+    "config_source": "explicit_file",
+    "checkpoint_path": "artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_full_rig_wavenet_12k_seed42/best.ckpt",
+    "checkpoint_size_bytes": 461154,
+    "trainable_parameters": 12129
+  },
+  "runtime": {
+    "python_version": "3.11.15",
+    "torch_version": "2.11.0+cu130",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+    "device": "cpu",
+    "device_name": "13th Gen Intel(R) Core(TM) i5-13400F",
+    "dtype": "float32",
+    "torch_num_threads": 1
+  },
+  "workload": {
+    "sample_rate": 44100,
+    "batch_size": 1,
+    "input_channels": 1,
+    "offline_samples": 44100,
+    "block_sizes": [
+      64,
+      128,
+      256,
+      512
+    ],
+    "warmup_runs": 3,
+    "measurement_runs": 20,
+    "seed": 42
+  },
+  "offline": {
+    "runs": 20,
+    "median_ms": 363.1635775,
+    "p95_ms": 385.08644385,
+    "min_ms": 335.676574,
+    "max_ms": 388.164137,
+    "throughput_samples_per_second": 121432.88240407313,
+    "real_time_factor": 0.3631635775
+  },
+  "blocks": [
+    {
+      "runs": 20,
+      "median_ms": 2.727591,
+      "p95_ms": 2.8391493,
+      "min_ms": 2.663266,
+      "max_ms": 2.931818,
+      "throughput_samples_per_second": 23463.92842621933,
+      "real_time_factor": 1.8794806734375,
+      "block_size": 64,
+      "deadline_ms": 1.4512471655328798,
+      "deadline_misses": 20
+    },
+    {
+      "runs": 20,
+      "median_ms": 3.1997655,
+      "p95_ms": 3.43926495,
+      "min_ms": 3.109588,
+      "max_ms": 3.447453,
+      "throughput_samples_per_second": 40002.931464821406,
+      "real_time_factor": 1.102419207421875,
+      "block_size": 128,
+      "deadline_ms": 2.9024943310657596,
+      "deadline_misses": 20
+    },
+    {
+      "runs": 20,
+      "median_ms": 4.3871345,
+      "p95_ms": 4.48965285,
+      "min_ms": 4.352109,
+      "max_ms": 4.490353,
+      "throughput_samples_per_second": 58352.43938839806,
+      "real_time_factor": 0.7557524666015626,
+      "block_size": 256,
+      "deadline_ms": 5.804988662131519,
+      "deadline_misses": 0
+    },
+    {
+      "runs": 20,
+      "median_ms": 6.328704,
+      "p95_ms": 6.49868905,
+      "min_ms": 6.275722,
+      "max_ms": 6.502376,
+      "throughput_samples_per_second": 80901.23981150011,
+      "real_time_factor": 0.545109075,
+      "block_size": 512,
+      "deadline_ms": 11.609977324263038,
+      "deadline_misses": 0
+    }
+  ],
+  "memory": {
+    "model_state_bytes": 48516,
+    "process_peak_rss_bytes": 686645248,
+    "process_peak_rss_note": "Process high-water RSS; run one model per CLI process for comparable CPU results."
+  }
+}

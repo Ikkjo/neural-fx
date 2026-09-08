@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>neural-fx monitoring</title></head>
+<body>
+<h1>neural-fx offline monitoring</h1>
+<p>Suite <code>gear-comparison-44100-pearl-clean-sm57-test</code></p>
+<p>Artifact <code>2e77c717c6241c7ec81149478e31adf23d3957541703bf20a2271fa3f33f40e7</code></p>
+<h2>Silence policy</h2><pre>{&quot;id&quot;: &quot;digital_silence_v1&quot;, &quot;no_eligible_relative_score&quot;: null, &quot;relative_aggregation&quot;: &quot;mean of eligible scoring segments&quot;, &quot;stft&quot;: {&quot;fft_sizes&quot;: [512, 1024, 2048], &quot;hop_sizes&quot;: [128, 256, 512], &quot;mode&quot;: &quot;legacy&quot;, &quot;win_sizes&quot;: [512, 1024, 2048]}, &quot;target_rule&quot;: &quot;every target sample equals exactly zero&quot;, &quot;unavailable_relative_metrics&quot;: [&quot;esr&quot;, &quot;multi_resolution_stft_distance&quot;]}</pre>
+<h2>Aggregate metrics</h2><table><tr><th>esr</th><td>0.045565114</td></tr><tr><th>mse</th><td>0.0006377552</td></tr><tr><th>multi_resolution_stft_distance</th><td>1.2065264</td></tr><tr><th>p50_latency_ms</th><td>365.24652</td></tr><tr><th>p95_latency_ms</th><td>381.27158</td></tr><tr><th>real_time_factor</th><td>0.36524652</td></tr><tr><th>peak_memory_bytes</th><td>8.8265933e+08</td></tr><tr><th>artifact_size_bytes</th><td>94747</td></tr></table>
+<h2>Relative-score counts</h2><table><tr><th>Metric</th><th>Eligible</th><th>Excluded</th></tr><tr><th>esr</th><td>4</td><td>0</td></tr><tr><th>multi_resolution_stft_distance</th><td>4</td><td>0</td></tr></table>
+<h2>Cases</h2><table><tr><th>Case</th><th>Status</th><th>Digital silence</th><th>Diagnostics and metrics</th></tr><tr><td>early</td><td>eligible</td><td>False</td><td>digital_silence=False; relative_score_status=eligible; mse=0.00023552256; prediction_rms=0.061692927; prediction_abs_peak=0.26161376; esr=0.065245628; multi_resolution_stft_distance=1.329827</td></tr><tr><td>first-middle</td><td>eligible</td><td>False</td><td>digital_silence=False; relative_score_status=eligible; mse=0.00070903468; prediction_rms=0.13641679; prediction_abs_peak=0.48520279; esr=0.032033071; multi_resolution_stft_distance=1.3700749</td></tr><tr><td>second-middle</td><td>eligible</td><td>False</td><td>digital_silence=False; relative_score_status=eligible; mse=0.00068887172; prediction_rms=0.14136711; prediction_abs_peak=0.39102191; esr=0.035727743; multi_resolution_stft_distance=1.040072</td></tr><tr><td>late</td><td>eligible</td><td>False</td><td>digital_silence=False; relative_score_status=eligible; mse=0.00091759185; prediction_rms=0.1310645; prediction_abs_peak=0.36988264; esr=0.049254015; multi_resolution_stft_distance=1.0861319</td></tr></table>
+</body>
+</html>

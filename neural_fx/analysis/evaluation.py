@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,12 +18,24 @@ from ..config import NeuralFXConfig
 from ..data.audio import load_audio_pair
 from ..inference import run_inference
 from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
+from ..metrics import (
+    RELATIVE_METRICS,
+    average_eligible,
+    scoring_diagnostics,
+    silence_policy_metadata,
+)
 from ..preprocessing.latency import LatencyCalibration
 from .benchmarking import load_benchmark_result, load_model_for_evaluation
 
-EVALUATION_SCHEMA_VERSION = "1.0"
-COMPARISON_SCHEMA_VERSION = "1.0"
+EVALUATION_MANIFEST_SCHEMA_VERSION = "1.0"
+EVALUATION_RESULT_SCHEMA_VERSION = "1.1"
+EVALUATION_SCHEMA_VERSION = EVALUATION_RESULT_SCHEMA_VERSION
+COMPARISON_SCHEMA_VERSION = "1.2"
 DEFAULT_INFERENCE_CHUNK_SIZE = 65_536
+
+
+def _format_metric(value: float | None, digits: int) -> str:
+    return "N/A" if value is None else f"{value:.{digits}f}"
 
 
 def _resolve_path(value: str, manifest_path: Path) -> Path:
@@ -38,7 +49,7 @@ def load_experiment_manifest(path: str | Path) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise TypeError("Experiment manifest must contain a mapping")
-    if data.get("schema_version") != EVALUATION_SCHEMA_VERSION:
+    if data.get("schema_version") != EVALUATION_MANIFEST_SCHEMA_VERSION:
         raise ValueError(f"Unsupported manifest schema: {data.get('schema_version')}")
     for key in ("experiment_id", "run_kind", "model", "dataset", "training"):
         if key not in data:
@@ -179,7 +190,7 @@ def _calculate_evaluation_metrics(
     signals: _EvaluationSignals,
     manifest: dict[str, Any],
     config: NeuralFXConfig,
-) -> tuple[dict[str, float], dict[str, Any]]:
+) -> tuple[dict[str, float | None], dict[str, Any]]:
     mask_first = int(
         manifest.get(
             "burn_in_samples",
@@ -199,41 +210,119 @@ def _calculate_evaluation_metrics(
             "Evaluation segment after loss masking must contain 2048 samples"
         )
 
-    pre_emphasis = config.loss.pre_emphasis
-    pre_emphasis_coeff = (
-        pre_emphasis.coef if pre_emphasis is not None and pre_emphasis.enabled else None
-    )
+    complete_diagnostics = scoring_diagnostics(prediction, target)
+    pre_emphasis_coeff = manifest.get("esr_pre_emphasis")
+    if pre_emphasis_coeff is not None:
+        pre_emphasis_coeff = float(pre_emphasis_coeff)
+    esr_mode = manifest.get("esr_mode", "legacy")
     stft_starts, stft_window_samples = _stft_window_starts(
         prediction.shape[-1],
         config.sample_rate,
     )
     stft_loss = MultiResolutionSTFTLoss()
-    stft_values = [
-        stft_loss(
-            prediction[..., start : start + stft_window_samples],
-            target[..., start : start + stft_window_samples],
-        ).item()
-        for start in stft_starts
-    ]
+    stft_values: list[float | None] = []
+    stft_windows = []
+    for start in stft_starts:
+        window_prediction = prediction[..., start : start + stft_window_samples]
+        window_target = target[..., start : start + stft_window_samples]
+        diagnostics = scoring_diagnostics(window_prediction, window_target)
+        value = (
+            None
+            if diagnostics["digital_silence"]
+            else float(stft_loss(window_prediction, window_target).item())
+        )
+        stft_values.append(value)
+        stft_windows.append(
+            {
+                "start_sample": start,
+                "num_samples": stft_window_samples,
+                "multi_resolution_stft_distance": value,
+                **diagnostics,
+            }
+        )
+    stft_mean, stft_scored_count, stft_excluded_count = average_eligible(stft_values)
+    esr = (
+        None
+        if complete_diagnostics["digital_silence"]
+        else float(
+            ESR(
+                prediction,
+                target,
+                pre_emphasis_coeff=pre_emphasis_coeff,
+                mode=esr_mode,
+            ).item()
+        )
+    )
     metrics = {
-        "esr": ESR(
-            prediction,
-            target,
-            pre_emphasis_coeff=pre_emphasis_coeff,
-        ).item(),
-        "mse": torch.mean((prediction - target) ** 2).item(),
+        "esr": esr,
+        "mse": complete_diagnostics["mse"],
         "correlation": _safe_correlation(prediction, target),
-        "multi_resolution_stft_distance": statistics.fmean(stft_values),
+        "multi_resolution_stft_distance": stft_mean,
     }
+    if any(
+        value is not None and not math.isfinite(float(value))
+        for value in metrics.values()
+    ):
+        raise ValueError("Evaluation produced a non-finite metric")
     recipe = {
         "mask_first": mask_first,
+        "esr_mode": esr_mode,
+        "esr_pre_emphasis": pre_emphasis_coeff,
         "configured_loss_mask_first": config.loss.mask_first,
         "metric_samples": prediction.shape[-1],
         "stft_window_starts": stft_starts,
         "stft_window_samples": stft_window_samples,
         "stft_window_values": stft_values,
+        "stft_windows": stft_windows,
+        "stft_scored_count": stft_scored_count,
+        "stft_excluded_count": stft_excluded_count,
+        "scoring_diagnostics": complete_diagnostics,
+        "silence_policy": silence_policy_metadata(),
     }
     return metrics, recipe
+
+
+def _checkpoint_training_state(
+    checkpoint_path: str | Path,
+) -> dict[str, int | float | str | None]:
+    """Read training state when the artifact is a Lightning checkpoint."""
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    training_state: dict[str, int | float | str | None] = {
+        "epoch": None,
+        "global_step": None,
+        "monitor": None,
+        "monitor_value": None,
+    }
+    if not isinstance(checkpoint, dict):
+        return training_state
+
+    for key in ("epoch", "global_step"):
+        value = checkpoint.get(key)
+        if isinstance(value, torch.Tensor) and value.numel() == 1:
+            value = value.item()
+        if isinstance(value, int):
+            training_state[key] = value
+
+    callbacks = checkpoint.get("callbacks")
+    if not isinstance(callbacks, dict):
+        return training_state
+    for state in callbacks.values():
+        if (
+            not isinstance(state, dict)
+            or "monitor" not in state
+            or "current_score" not in state
+        ):
+            continue
+        monitor = state["monitor"]
+        score = state["current_score"]
+        if isinstance(score, torch.Tensor) and score.numel() == 1:
+            score = score.item()
+        training_state["monitor"] = monitor if isinstance(monitor, str) else None
+        training_state["monitor_value"] = (
+            float(score) if isinstance(score, (int, float)) else None
+        )
+        break
+    return training_state
 
 
 def _write_listening_samples(
@@ -267,6 +356,7 @@ def _load_evaluation_performance(
     return {
         "result_path": str(Path(benchmark_path).resolve()),
         "runtime": benchmark["runtime"],
+        "workload": benchmark["workload"],
         "offline": benchmark["offline"],
         "blocks": benchmark["blocks"],
         "memory": benchmark["memory"],
@@ -308,7 +398,7 @@ def evaluate_experiment(
     )
 
     return {
-        "schema_version": EVALUATION_SCHEMA_VERSION,
+        "schema_version": EVALUATION_RESULT_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "experiment_id": manifest["experiment_id"],
         "run_kind": manifest["run_kind"],
@@ -330,7 +420,13 @@ def evaluate_experiment(
             "name": config.name,
             "type": config.model.type,
             "trainable_parameters": trainable_parameters,
+            **(
+                {"checkpoint_policy": model_spec["checkpoint_policy"]}
+                if "checkpoint_policy" in model_spec
+                else {}
+            ),
         },
+        "checkpoint": _checkpoint_training_state(model_spec["checkpoint"]),
         "training": manifest["training"],
         "inference": {
             "chunk_size": signals.chunk_size,
@@ -357,19 +453,29 @@ def write_evaluation_result(result: dict[str, Any], path: str | Path) -> None:
     """Write a checkpoint evaluation result."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, indent=2) + "\n")
+    path.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
 
 
 def load_evaluation_result(path: str | Path) -> dict[str, Any]:
     """Load and minimally validate an evaluation result."""
     result = json.loads(Path(path).read_text())
-    if result.get("schema_version") != EVALUATION_SCHEMA_VERSION:
+    if result.get("schema_version") != EVALUATION_RESULT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported evaluation schema: {result.get('schema_version')}"
         )
     for key in ("experiment_id", "run_kind", "sources", "model", "metrics"):
         if key not in result:
             raise ValueError(f"Evaluation result is missing '{key}'")
+    for name, value in result["metrics"].items():
+        if value is None:
+            if name not in RELATIVE_METRICS:
+                raise ValueError(f"Evaluation metric '{name}' cannot be null")
+        elif (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"Evaluation metric '{name}' must be finite or null")
     return result
 
 
@@ -403,10 +509,87 @@ def _size_matched_groups(
     ]
 
 
+def _relative_value(
+    value: float | int | None, reference: float | int | None
+) -> dict[str, float | None]:
+    if value is None or reference is None or reference == 0:
+        return {"ratio": None, "percent_change": None}
+    ratio = float(value) / float(reference)
+    return {"ratio": ratio, "percent_change": (ratio - 1.0) * 100.0}
+
+
+def _format_relative(value: dict[str, float | None]) -> str:
+    ratio = value["ratio"]
+    change = value["percent_change"]
+    return (
+        "N/A" if ratio is None or change is None else f"{ratio:.2f}x ({change:+.0f}%)"
+    )
+
+
+def _comparison_performance(result: dict[str, Any]) -> dict[str, Any] | None:
+    performance = result.get("performance")
+    if performance is None:
+        return None
+    required = ("runtime", "offline", "blocks", "memory")
+    if not all(key in performance for key in required):
+        raise ValueError("Evaluation performance is incomplete")
+    return performance
+
+
+def _validate_performance(results: list[dict[str, Any]]) -> None:
+    performances = [_comparison_performance(result) for result in results]
+    if not any(performances):
+        return
+    if not all(performances):
+        raise ValueError("Evaluation results must all include benchmark performance")
+    reference = performances[0]
+    assert reference is not None
+    expected = {
+        "runtime": {
+            key: reference["runtime"].get(key)
+            for key in (
+                "device",
+                "device_name",
+                "dtype",
+                "torch_num_threads",
+                "platform",
+                "python_version",
+                "torch_version",
+            )
+        },
+        "workload": None,
+    }
+    benchmark_workload = reference.get("workload")
+    if benchmark_workload is not None:
+        expected["workload"] = benchmark_workload
+    for performance in performances[1:]:
+        assert performance is not None
+        candidate = {
+            "runtime": {
+                key: performance["runtime"].get(key)
+                for key in (
+                    "device",
+                    "device_name",
+                    "dtype",
+                    "torch_num_threads",
+                    "platform",
+                    "python_version",
+                    "torch_version",
+                )
+            },
+            "workload": performance.get("workload"),
+        }
+        if candidate != expected:
+            raise ValueError(
+                "Evaluation results must use the same benchmark environment and workload"
+            )
 
 
 def build_comparison_report(
-    results: list[dict[str, Any]], size_tolerance: float = 1.35
+    results: list[dict[str, Any]],
+    *,
+    reference_experiment_id: str,
+    size_tolerance: float = 1.35,
 ) -> tuple[dict[str, Any], str]:
     """Combine quality and performance results into JSON and Markdown reports."""
     if not results:
@@ -419,10 +602,32 @@ def build_comparison_report(
         "evaluated_samples",
         "sample_rate",
         "latency_samples",
+        "preparation_delay_samples",
         "normalization",
         "mask_first",
         "metric_samples",
+        "esr_mode",
+        "esr_pre_emphasis",
+        "silence_policy",
+        "stft_window_starts",
+        "stft_window_samples",
     )
+    for result in results:
+        dataset = result.get("dataset", {})
+        if "esr_mode" not in dataset or "esr_pre_emphasis" not in dataset:
+            raise ValueError(
+                "Evaluation results must record esr_mode and esr_pre_emphasis before comparison"
+            )
+        if "silence_policy" not in dataset:
+            raise ValueError(
+                "Evaluation results must record the silence policy before comparison"
+            )
+        if dataset["silence_policy"] != silence_policy_metadata():
+            raise ValueError("Evaluation results must use the same silence policy")
+        if "stft_window_starts" not in dataset or "stft_window_samples" not in dataset:
+            raise ValueError(
+                "Evaluation results must record the STFT window recipe before comparison"
+            )
     expected_dataset = {
         key: results[0].get("dataset", {}).get(key) for key in dataset_keys
     }
@@ -432,6 +637,18 @@ def build_comparison_report(
             raise ValueError(
                 "Evaluation results must use the same aligned dataset segment"
             )
+    references = [
+        result
+        for result in results
+        if result["experiment_id"] == reference_experiment_id
+    ]
+    if len(references) != 1:
+        raise ValueError(
+            f"Expected exactly one reference result: {reference_experiment_id}"
+        )
+    _validate_performance(results)
+    reference = references[0]
+    reference_performance = _comparison_performance(reference) or {}
     groups = _size_matched_groups(results, size_tolerance)
     group_by_experiment = {
         experiment: group["id"]
@@ -440,25 +657,75 @@ def build_comparison_report(
     }
     rows = []
     for result in results:
-        performance = result.get("performance") or {}
+        performance = _comparison_performance(result) or {}
         offline = performance.get("offline") or {}
         blocks = performance.get("blocks") or []
+        memory = performance.get("memory") or {}
         block_128 = next(
             (block for block in blocks if block["block_size"] == 128), None
         )
-        rows.append(
-            {
-                "experiment_id": result["experiment_id"],
-                "size_group": group_by_experiment[result["experiment_id"]],
-                "run_kind": result["run_kind"],
-                "model": result["model"],
-                "metrics": result["metrics"],
-                "offline_real_time_factor": offline.get("real_time_factor"),
-                "block_128_p95_ms": block_128.get("p95_ms") if block_128 else None,
-                "sources": result["sources"],
-                "listening_samples": result.get("artifacts", {}),
-            }
+        row = {
+            "experiment_id": result["experiment_id"],
+            "size_group": group_by_experiment[result["experiment_id"]],
+            "run_kind": result["run_kind"],
+            "model": result["model"],
+            "metrics": result["metrics"],
+            "diagnostics": result.get("dataset", {}).get("scoring_diagnostics"),
+            "stft_scored_count": result.get("dataset", {}).get("stft_scored_count"),
+            "stft_excluded_count": result.get("dataset", {}).get("stft_excluded_count"),
+            "checkpoint": result.get("checkpoint"),
+            "offline_real_time_factor": offline.get("real_time_factor"),
+            "block_128_p95_ms": block_128.get("p95_ms") if block_128 else None,
+            "blocks": blocks,
+            "model_state_bytes": memory.get("model_state_bytes"),
+            "sources": result["sources"],
+            "listening_samples": result.get("artifacts", {}),
+        }
+        rows.append(row)
+    reference_blocks = {
+        block["block_size"]: block for block in reference_performance.get("blocks", [])
+    }
+    for row in rows:
+        row["relative_to_reference"] = {
+            "esr": _relative_value(
+                row["metrics"].get("esr"), reference["metrics"].get("esr")
+            ),
+            "mse": _relative_value(
+                row["metrics"].get("mse"), reference["metrics"].get("mse")
+            ),
+            "multi_resolution_stft_distance": _relative_value(
+                row["metrics"].get("multi_resolution_stft_distance"),
+                reference["metrics"].get("multi_resolution_stft_distance"),
+            ),
+            "trainable_parameters": _relative_value(
+                row["model"].get("trainable_parameters"),
+                reference["model"].get("trainable_parameters"),
+            ),
+            "offline_real_time_factor": _relative_value(
+                row["offline_real_time_factor"],
+                (reference_performance.get("offline") or {}).get("real_time_factor"),
+            ),
+            "block_p95_ms": {
+                str(block["block_size"]): _relative_value(
+                    block.get("p95_ms"),
+                    reference_blocks.get(block["block_size"], {}).get("p95_ms"),
+                )
+                for block in row["blocks"]
+            },
+        }
+    rows.sort(
+        key=lambda row: (
+            row["metrics"]["esr"] is None,
+            row["metrics"]["esr"] if row["metrics"]["esr"] is not None else math.inf,
         )
+    )
+    rank = 1
+    for row in rows:
+        if row["metrics"]["esr"] is None:
+            row["esr_rank"] = None
+        else:
+            row["esr_rank"] = rank
+            rank += 1
     report = {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -468,65 +735,120 @@ def build_comparison_report(
             else "final_experiment"
         ),
         "size_tolerance_ratio": size_tolerance,
+        "reference_experiment_id": reference_experiment_id,
+        "relative_value_convention": {
+            "reference": "candidate / LSTM-40 reference",
+            "percent_change": "(candidate / reference - 1) * 100",
+            "lower_is_better": [
+                "esr",
+                "mse",
+                "multi_resolution_stft_distance",
+                "trainable_parameters",
+                "offline_real_time_factor",
+                "block_p95_ms",
+            ],
+            "unavailable": "null when the reference or candidate value is unavailable, or the reference is zero",
+        },
+        "primary_metric": {
+            "name": "esr",
+            "direction": "lower_is_better",
+            "secondary_metrics": [
+                "mse",
+                "correlation",
+                "multi_resolution_stft_distance",
+            ],
+        },
+        "silence_policy": silence_policy_metadata(),
         "size_groups": groups,
         "results": rows,
     }
 
-    header = (
-        "| Experiment | Size group | Kind | Type | Parameters | ESR | MSE | "
-        "MR-STFT | Correlation | Offline RTF | 128 p95 ms | Inputs | Samples |\n"
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
+    quality_header = (
+        "| ESR rank | Experiment | Type | Parameters (relative) | State (bytes) | ESR (relative) | MSE (relative) | MR-STFT (relative) | STFT scored/excluded | Correlation |\n"
+        "| ---: | --- | --- | --- | ---: | --- | --- | --- | ---: | ---: |"
     )
-    lines = [header]
+    quality_lines = [quality_header]
+    cpu_header = (
+        "| Experiment | Offline RTF (relative) | 64 p95/deadline/misses (relative) | 128 p95/deadline/misses (relative) | 256 p95/deadline/misses (relative) | 512 p95/deadline/misses (relative) |\n"
+        "| --- | --- | --- | --- | --- | --- |"
+    )
+    cpu_lines = [cpu_header]
     for row in rows:
-        sources = row["sources"]
-        config_link = (
-            f"[config]({sources['config']})"
-            if sources.get("config") is not None
-            else "config embedded in checkpoint"
-        )
-        source_links = (
-            f"[manifest]({sources['manifest']}), {config_link}, "
-            f"[checkpoint]({sources['checkpoint']})"
-        )
-        samples = row["listening_samples"]
-        sample_links = (
-            f"[input]({samples['input_audio']}), [target]({samples['target_audio']}), "
-            f"[prediction]({samples['prediction_audio']})"
-            if samples
+        metrics = row["metrics"]
+        relative = row["relative_to_reference"]
+        stft_counts = (
+            f"{row['stft_scored_count']}/{row['stft_excluded_count']}"
+            if row["stft_scored_count"] is not None
+            and row["stft_excluded_count"] is not None
             else "—"
         )
-        metrics = row["metrics"]
-        lines.append(
-            "| {experiment_id} | {size_group} | {run_kind} | {model_type} | "
-            "{parameters:,} | {esr:.6f} | {mse:.6f} | {stft:.6f} | "
-            "{correlation:.4f} | {rtf} | {p95} | {sources} | {samples} |".format(
+
+        quality_lines.append(
+            "| {esr_rank} | {experiment_id} | {model_type} | {parameters:,} ({parameters_relative}) | "
+            "{state} | {esr} ({esr_relative}) | {mse} ({mse_relative}) | {stft} ({stft_relative}) | "
+            "{stft_counts} | {correlation:.4f} |".format(
+                esr_rank=(row["esr_rank"] if row["esr_rank"] is not None else "—"),
                 experiment_id=row["experiment_id"],
-                size_group=row["size_group"],
-                run_kind=row["run_kind"],
-                model_type=row["model"]["type"],
+                model_type=row["model"].get("type", "unknown"),
                 parameters=row["model"]["trainable_parameters"],
-                esr=metrics["esr"],
-                mse=metrics["mse"],
-                stft=metrics["multi_resolution_stft_distance"],
+                parameters_relative=_format_relative(relative["trainable_parameters"]),
+                state=(
+                    row["model_state_bytes"]
+                    if row["model_state_bytes"] is not None
+                    else "N/A"
+                ),
+                esr=_format_metric(metrics["esr"], 6),
+                esr_relative=_format_relative(relative["esr"]),
+                mse=_format_metric(metrics["mse"], 6),
+                mse_relative=_format_relative(relative["mse"]),
+                stft=_format_metric(metrics["multi_resolution_stft_distance"], 6),
+                stft_relative=_format_relative(
+                    relative["multi_resolution_stft_distance"]
+                ),
+                stft_counts=stft_counts,
                 correlation=metrics["correlation"],
-                rtf=(
-                    f"{row['offline_real_time_factor']:.4f}"
-                    if row["offline_real_time_factor"] is not None
-                    else "—"
-                ),
-                p95=(
-                    f"{row['block_128_p95_ms']:.3f}"
-                    if row["block_128_p95_ms"] is not None
-                    else "—"
-                ),
-                sources=source_links,
-                samples=sample_links,
             )
         )
-    prefix = "# Model comparison\n\n" + (
+        blocks = {block["block_size"]: block for block in row["blocks"]}
+
+        def block_cell(size: int) -> str:
+            block = blocks.get(size)
+            if block is None:
+                return "N/A"
+            status = "met" if block.get("deadline_misses") == 0 else "missed"
+            return (
+                f"{block['p95_ms']:.3f}/{block['deadline_ms']:.3f}/{block['deadline_misses']} "
+                f"({_format_relative(relative['block_p95_ms'].get(str(size), {'ratio': None, 'percent_change': None}))}; {status})"
+            )
+
+        cpu_lines.append(
+            "| {experiment} | {rtf} ({relative_rtf}) | {b64} | {b128} | {b256} | {b512} |".format(
+                experiment=row["experiment_id"],
+                rtf=_format_metric(row["offline_real_time_factor"], 4),
+                relative_rtf=_format_relative(relative["offline_real_time_factor"]),
+                b64=block_cell(64),
+                b128=block_cell(128),
+                b256=block_cell(256),
+                b512=block_cell(512),
+            )
+        )
+    prefix = "# Model comparison\n\n"
+    prefix += "> ESR is the primary ranking metric. Lower ESR is better. MSE, correlation, and MR-STFT are secondary metrics. Ratios use candidate / LSTM-40; for ratio metrics, lower is better.\n\n"
+    prefix += (
         "> These results include smoke runs. They validate the workflow and must not be used as a final quality ranking.\n\n"
         if report["interpretation"] == "workflow_validation_only"
         else "> Final experiment results. Interpret them with the recorded dataset, seeds, and hardware.\n\n"
     )
-    return report, prefix + "\n".join(lines) + "\n"
+    environment = reference_performance.get("runtime")
+    workload = reference_performance.get("workload")
+    if environment and workload:
+        prefix += (
+            f"> Environment: {environment.get('device_name')}; {environment.get('platform')}; "
+            f"PyTorch {environment.get('torch_version')}; {environment.get('dtype')}; "
+            f"{environment.get('torch_num_threads')} thread(s); {workload.get('warmup_runs')} warm-ups; "
+            f"{workload.get('measurement_runs')} measurements.\n\n"
+        )
+    prefix += "> Block measurements cover stateful model-forward compute only. They exclude audio-interface latency, buffering, operating-system scheduling, and device round-trip. `met` means zero recorded deadline misses; it is not a hard real-time guarantee.\n\n"
+    return report, prefix + "## Quality and model\n\n" + "\n".join(
+        quality_lines
+    ) + "\n\n## CPU\n\n" + "\n".join(cpu_lines) + "\n"

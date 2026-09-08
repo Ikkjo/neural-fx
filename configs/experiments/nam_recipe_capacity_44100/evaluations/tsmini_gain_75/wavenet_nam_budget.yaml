@@ -1,0 +1,29 @@
+schema_version: '1.0'
+experiment_id: nam_recipe_capacity_44100_tsmini_gain_75_wavenet_nam_budget_seed42
+run_kind: final
+inference_chunk_size: 65536
+esr_mode: nam
+burn_in_samples: 4096
+esr_pre_emphasis: null
+model:
+  type: wavenet
+  config: ../../runs/tsmini_gain_75/wavenet_nam_budget.yaml
+  checkpoint: ../../../../../local/nam_recipe_capacity_44100/checkpoints/nam_recipe_capacity_44100_tsmini_gain_75_wavenet_nam_budget_seed42/best.ckpt
+  checkpoint_policy: best
+  benchmark_result: ../../../../../local/nam_recipe_capacity_44100/results/benchmarks/final/nam_recipe_capacity_44100_tsmini_gain_75_wavenet_nam_budget_seed42.json
+dataset:
+  input_audio: ../../../../../local/nam_recipe_capacity_44100/data/tsmini_gain_75/data/test/input.wav
+  target_audio: ../../../../../local/nam_recipe_capacity_44100/data/tsmini_gain_75/data/test/target.wav
+  split: test
+  start_sample: 0
+  num_samples: 3907584
+  latency_samples: 0
+  preparation_delay_samples: -41
+  normalization: none
+  metric_mask_first: 4096
+training:
+  seed: 42
+  epochs: 100
+  deterministic: true
+  selection_metric: val_loss
+  early_stopping: false
