@@ -83,5 +83,6 @@ ebcace12a82695460f8d1e19560c3da8a88c79a6fe31550194e772db55ad4460  ./evaluations/
 cd27a60c93ff352b096d8e057274b24341cca32b15d1652c03942b58cfdbaa70  ./monitoring/tamu/baseline/monitoring.json
 094483e4ef18b9825abf1a82d9aec8e03bef911b9ca40cd2f0e1dd1d4487281e  ./monitoring/tamu/candidate/monitoring.json
 d3e3e6e7d526c10f6db3c59a9bfcf38a80cb594811043ce341bced5b05d61988  ./monitoring/tamu/comparison/comparison.json
-2364b3a52dc0c3c5bdbe72610162e16a22b6a1c946ddc0c4f840f3c280a42657  ./monitoring/tamu/comparison/comparison.md
+a0f499234ae60bc2f2b2e9031135057b1488274231ac700652be05fa0d851ebd  ./monitoring/tamu/comparison/comparison.md
 3d95c2db909716ded258a0ad07fa66b8be005f9f15b7e2a59d9cec5276ac7f8b  ./monitoring/tamu/policy/tamu-artifact-policy.yaml
+694ff0de525b7860075a4c57f8f0c1bfc73f12d532cf5dfade016b7da4f93df9  ./README.md
