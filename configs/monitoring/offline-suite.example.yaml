@@ -9,7 +9,6 @@ latency_block_sizes: [128, 512]
 warmup_runs: 2
 measurement_runs: 10
 quality_metrics: [esr, mse, multi_resolution_stft_distance]
-esr_mode: nam
 esr_pre_emphasis: 0.85
 clipping_threshold: 0.999
 max_abs: 1.0

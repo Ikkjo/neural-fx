@@ -11,56 +11,6 @@ The main workflows run through scripts. The `neural_fx` package provides shared 
 - A dry input WAV and its time-aligned processed target WAV
 - A CUDA GPU for practical training times, or a CPU for small runs
 
-## Running final experiments
-
-Clone the repository and install the core package:
-
-```bash
-git clone https://github.com/Ikkjo/neural-fx.git
-cd neural-fx
-python -m pip install -e .
-```
-
-Run dataset setup, validation, training, and final benchmark, evaluation and comparison:
-
-```bash
-bash -euo pipefail -c '
-EXP=configs/experiments/gear_comparison_44100/experiment.yaml
-PY=.venv/bin/python
-
-$PY scripts/prepare_experiment.py --experiment "$EXP" generate
-$PY scripts/prepare_experiment.py --experiment "$EXP" check
-$PY scripts/prepare_experiment.py --experiment "$EXP" prepare-audio
-$PY scripts/run_experiment.py benchmark-initial --experiment "$EXP" --fail-fast
-$PY scripts/run_experiment.py smoke --experiment "$EXP" --fail-fast
-$PY scripts/run_experiment.py train --experiment "$EXP" --fail-fast
-$PY scripts/run_experiment.py benchmark-final --experiment "$EXP" --fail-fast
-$PY scripts/run_experiment.py evaluate --experiment "$EXP" --fail-fast
-$PY scripts/run_experiment.py compare --experiment "$EXP" --fail-fast
-'
-```
-Or run the stages one by one:
-```bash
-.venv/bin/python scripts/prepare_experiment.py --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" generate
-```
-```bash
-.venv/bin/python scripts/prepare_experiment.py --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" prepare-audio
-```
-```bash
-.venv/bin/python scripts/run_experiment.py smoke --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" --fail-fast
-```
-```bash
-.venv/bin/python scripts/run_experiment.py train --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" --fail-fast
-```
-```bash
-.venv/bin/python scripts/run_experiment.py benchmarks-final --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" --fail-fast
-```
-```bash
-.venv/bin/python scripts/run_experiment.py evaluate --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" --fail-fast
-```
-```bash
-.venv/bin/python scripts/run_experiment.py compare --experiment "configs/experiments/gear_comparison_44100/experiment.yaml" --fail-fast
-```
 ## Quick start
 
 Clone the repository and install the core package:
@@ -120,8 +70,6 @@ One epoch checks the workflow. It does not produce a useful amplifier or effect 
 
 The shipped WaveNet configs enable `torch.compile`. This default improved warmed training time by about 20% on the measured RTX 3050 workload. Results can differ on other hardware.
 
-The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model for `ds1_gain_75`, `tsmini_gain_75`, `pearl_clean_sm57`, and `full_rig`. The [NM course comparison section](docs/evaluation.md#nm-course-comparison) explains the roles of the GRU and WaveNet alternatives. Final results, selected checkpoints, and listening WAVs are in the [evidence package](docs/reproducibility.md).
-
 ## Documentation
 
 - [Setup](docs/setup.md): development tools, ONNX dependencies, CUDA, and environment checks
@@ -129,7 +77,6 @@ The four-device NM comparison uses `lstm_7k` (LSTM-40) as its reference model fo
 - [Inference and export](docs/inference-and-export.md): file and streaming inference, artifact loading, and export support
 - [Evaluation](docs/evaluation.md): controlled quality evaluation and inference benchmarks
 - [Offline monitoring](docs/monitoring.md): repeatable checks for checkpoints and TorchScript artifacts
-- [Final experiment evidence](docs/reproducibility.md): published results, checkpoints, listening WAVs, and rerun instructions
 - [S4D architecture decision](docs/decisions/ssm-architecture.md): the accepted state-space model design
 
 ## Development checks

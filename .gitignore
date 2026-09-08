@@ -14,7 +14,6 @@ TODO.md
 .venv/
 /data
 local/
-docs/research/
 venv
 
 # Training artifacts
@@ -25,5 +24,3 @@ notebooks/lightning_logs/
 *.pt
 *.pth.tar
 events.out.tfevents.*
-
-!artifacts/gear_comparison_44100/**/*.ckpt

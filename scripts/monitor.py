@@ -23,7 +23,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--html", action="store_true")
-    parser.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -41,7 +40,6 @@ def main(argv: list[str] | None = None) -> int:
             report,
             args.output_dir,
             include_html=args.html,
-            overwrite=args.overwrite,
         )
     except (MonitoringError, OSError, TypeError, ValueError) as exc:
         print(f"Monitoring failed: {exc}", file=sys.stderr)

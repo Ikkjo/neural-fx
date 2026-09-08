@@ -23,23 +23,6 @@ from ..models import BaseNeuralFXModel
 BENCHMARK_SCHEMA_VERSION = "1.0"
 
 
-def cpu_name() -> str:
-    """Return the most specific CPU name available without extra dependencies."""
-    processor = platform.processor().strip()
-    machine = platform.machine().strip()
-    if processor and processor != machine:
-        return processor
-    if sys.platform.startswith("linux"):
-        try:
-            for line in Path("/proc/cpuinfo").read_text().splitlines():
-                key, separator, value = line.partition(":")
-                if separator and key.strip() == "model name" and value.strip():
-                    return value.strip()
-        except OSError:
-            pass
-    return processor or machine
-
-
 def load_model_for_evaluation(
     config_path: str | Path | None = None,
     checkpoint_path: str | Path | None = None,
@@ -192,7 +175,9 @@ def benchmark_model(
         memory["cuda_peak_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
 
     device_name = (
-        torch.cuda.get_device_name(device) if device.type == "cuda" else cpu_name()
+        torch.cuda.get_device_name(device)
+        if device.type == "cuda"
+        else platform.processor() or platform.machine()
     )
     return {
         "schema_version": BENCHMARK_SCHEMA_VERSION,
@@ -237,7 +222,9 @@ def benchmark_model(
             "measurement_runs": measurement_runs,
             "seed": seed,
         },
-        "offline": _latency_summary(offline_latencies, num_samples, sample_rate),
+        "offline": _latency_summary(
+            offline_latencies, num_samples, sample_rate
+        ),
         "blocks": block_results,
         "memory": memory,
     }

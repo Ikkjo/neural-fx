@@ -11,10 +11,8 @@ from typing import Any, Literal
 
 import yaml
 
-from ..metrics import RELATIVE_METRICS, silence_policy_metadata
-
 MONITORING_MANIFEST_SCHEMA_VERSION = "1.0"
-MONITORING_REPORT_SCHEMA_VERSION = "1.1"
+MONITORING_REPORT_SCHEMA_VERSION = "1.0"
 SUPPORTED_QUALITY_METRICS = (
     "esr",
     "mse",
@@ -176,7 +174,6 @@ class MonitoringManifest:
     warmup_runs: int
     measurement_runs: int
     quality_metrics: tuple[str, ...]
-    esr_mode: Literal["legacy", "nam"]
     esr_pre_emphasis: float | None
     clipping_threshold: float
     max_abs: float
@@ -209,7 +206,7 @@ class MonitoringManifest:
                 "max_abs",
                 "cases",
             },
-            optional={"allow_target_full_scale", "esr_mode"},
+            optional={"allow_target_full_scale"},
         )
         manifest_path = Path(manifest_path).expanduser().resolve()
         schema_version = data["schema_version"]
@@ -279,10 +276,6 @@ class MonitoringManifest:
         if not quality_metrics or len(set(quality_metrics)) != len(quality_metrics):
             raise ValueError("quality_metrics must be non-empty and unique")
 
-        esr_mode = data.get("esr_mode", "legacy")
-        if esr_mode not in {"legacy", "nam"}:
-            raise ValueError("esr_mode must be 'legacy' or 'nam'")
-
         esr_value = data["esr_pre_emphasis"]
         esr_pre_emphasis = (
             None
@@ -318,7 +311,6 @@ class MonitoringManifest:
             warmup_runs=warmup_runs,
             measurement_runs=measurement_runs,
             quality_metrics=quality_metrics,
-            esr_mode=esr_mode,
             esr_pre_emphasis=esr_pre_emphasis,
             clipping_threshold=clipping_threshold,
             max_abs=max_abs,
@@ -342,9 +334,7 @@ class MonitoringManifest:
             "warmup_runs": self.warmup_runs,
             "measurement_runs": self.measurement_runs,
             "quality_metrics": list(self.quality_metrics),
-            "esr_mode": self.esr_mode,
             "esr_pre_emphasis": self.esr_pre_emphasis,
-            "silence_policy": silence_policy_metadata(),
             "clipping_threshold": self.clipping_threshold,
             "max_abs": self.max_abs,
             "allow_target_full_scale": self.allow_target_full_scale,
@@ -405,24 +395,6 @@ def fingerprint_monitoring_suite(
     return hashlib.sha256(canonical_json.encode()).hexdigest()
 
 
-def _validate_metric_map(values: Any, *, allow_memory: bool = False) -> None:
-    if not isinstance(values, dict):
-        raise ValueError("Monitoring metrics must contain a mapping")
-    for name, value in values.items():
-        if value is None:
-            if name not in RELATIVE_METRICS and not (
-                allow_memory and name == "peak_memory_bytes"
-            ):
-                raise ValueError(f"Monitoring metric '{name}' cannot be null")
-            continue
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
-            raise ValueError("Monitoring report metrics must be finite numbers or null")
-
-
 @dataclass(frozen=True)
 class MonitoringCaseResult:
     """Quality and operational measurements for one suite case."""
@@ -432,8 +404,7 @@ class MonitoringCaseResult:
     target_sha256: str
     evaluated_samples: int
     metric_samples: int
-    metrics: dict[str, float | None]
-    diagnostics: dict[str, Any]
+    metrics: dict[str, float]
     latency: dict[str, dict[str, Any]]
 
 
@@ -474,48 +445,17 @@ class MonitoringReport:
         ):
             if key not in data:
                 raise ValueError(f"Monitoring report is missing '{key}'")
-        if data["workload"].get("silence_policy") != silence_policy_metadata():
-            raise ValueError("Monitoring report must record silence_policy")
         validations = tuple(ValidationCheck(**item) for item in data["validation"])
         cases = tuple(MonitoringCaseResult(**item) for item in data["cases"])
         if not cases:
             raise ValueError("Monitoring report must contain at least one case")
-        _validate_metric_map(data["aggregate"].get("metrics", {}), allow_memory=True)
-        _validate_metric_map(data["aggregate"].get("quality", {}))
-        for case in cases:
-            _validate_metric_map(case.metrics)
-            required_diagnostics = {
-                "digital_silence",
-                "relative_score_status",
-                "mse",
-                "prediction_rms",
-                "prediction_abs_peak",
-            }
-            if not required_diagnostics <= set(case.diagnostics):
-                raise ValueError("Monitoring case diagnostics are incomplete")
-            if not isinstance(case.diagnostics["digital_silence"], bool):
-                raise ValueError("digital_silence must be boolean")
-            if case.diagnostics["relative_score_status"] not in {
-                "eligible",
-                "excluded",
-            }:
-                raise ValueError("relative_score_status is invalid")
-            expected_status = (
-                "excluded" if case.diagnostics["digital_silence"] else "eligible"
-            )
-            if case.diagnostics["relative_score_status"] != expected_status:
-                raise ValueError("relative_score_status does not match digital_silence")
-            for name in ("mse", "prediction_rms", "prediction_abs_peak"):
-                value = case.diagnostics[name]
-                if (
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(value)
-                ):
-                    raise ValueError("Monitoring diagnostics must be finite numbers")
-            for value in case.diagnostics.values():
-                if isinstance(value, float) and not math.isfinite(value):
-                    raise ValueError("Monitoring diagnostics must be finite numbers")
+        metric_values = list(data["aggregate"].get("metrics", {}).values())
+        metric_values.extend(value for case in cases for value in case.metrics.values())
+        if any(
+            not isinstance(value, (int, float)) or not math.isfinite(value)
+            for value in metric_values
+        ):
+            raise ValueError("Monitoring report metrics must be finite numbers")
         return cls(
             schema_version=data["schema_version"],
             created_at=str(data["created_at"]),

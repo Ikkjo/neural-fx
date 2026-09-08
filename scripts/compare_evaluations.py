@@ -16,14 +16,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results", nargs="+", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--reference-experiment-id", required=True)
     parser.add_argument("--size-tolerance", type=float, default=1.35)
     args = parser.parse_args()
 
     results = [load_evaluation_result(path) for path in args.results]
     report, markdown = build_comparison_report(
         results,
-        reference_experiment_id=args.reference_experiment_id,
         size_tolerance=args.size_tolerance,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)

@@ -27,12 +27,9 @@ class TrainingRun:
     resume_path: Path | None
     ignore_checks: bool
     patience: int
-    min_delta: float
-    min_delta_mode: str
     plot: bool
     val_check_interval: float
     log_every_n_steps: int
-    enable_progress_bar: bool = True
 
     @classmethod
     def resolve(
@@ -45,15 +42,11 @@ class TrainingRun:
         resume_path: str | Path | None = None,
         ignore_checks: bool = False,
         patience: int | None = None,
-        min_delta: float | None = None,
-        min_delta_mode: str | None = None,
         plot: bool = False,
         val_check_interval: float = 1.0,
         log_every_n_steps: int = 50,
-        enable_progress_bar: bool = True,
         max_epochs: int | None = None,
         compile: bool | None = None,
-        num_workers: int | None = None,
         latency_method: str | None = None,
         latency_manual: int | None = None,
     ) -> "TrainingRun":
@@ -74,11 +67,6 @@ class TrainingRun:
                 config.training,
                 epochs=epochs,
                 compile=config.training.compile if compile is None else compile,
-                num_workers=(
-                    config.training.num_workers
-                    if num_workers is None
-                    else num_workers
-                ),
             ),
             latency=replace(
                 config.latency,
@@ -93,25 +81,10 @@ class TrainingRun:
             force_cpu=force_cpu,
             resume_path=Path(resume_path) if resume_path is not None else None,
             ignore_checks=ignore_checks,
-            patience=(
-                patience
-                if patience is not None
-                else config.training.early_stopping_patience
-            ),
-            min_delta=(
-                min_delta
-                if min_delta is not None
-                else config.training.early_stopping_min_delta
-            ),
-            min_delta_mode=(
-                min_delta_mode
-                if min_delta_mode is not None
-                else config.training.early_stopping_min_delta_mode
-            ),
+            patience=patience if patience is not None else 10,
             plot=plot,
             val_check_interval=val_check_interval,
             log_every_n_steps=log_every_n_steps,
-            enable_progress_bar=enable_progress_bar,
         )
 
 
@@ -262,8 +235,7 @@ def _training_callbacks(
         callbacks.append(
             ValidationEarlyStopping(
                 monitor=monitor,
-                min_delta=run.min_delta,
-                min_delta_mode=run.min_delta_mode,
+                min_delta=0.0,
                 patience=run.patience,
                 mode="min",
             )
@@ -280,7 +252,7 @@ def _trainer_kwargs(run: TrainingRun, callbacks: list[Callback]) -> dict[str, ob
         "devices": run.gpus if use_gpu else 1,
         "callbacks": callbacks,
         "gradient_clip_val": 1.0,
-        "enable_progress_bar": run.enable_progress_bar,
+        "enable_progress_bar": True,
         "val_check_interval": run.val_check_interval,
         "logger": create_training_loggers(run.checkpoint_dir, config.name),
         "log_every_n_steps": run.log_every_n_steps,
@@ -358,11 +330,7 @@ def run_training(run: TrainingRun) -> TrainingResult:
     else:
         trainer.fit(module)
 
-    terminal_checkpoint = Path(checkpoint.last_model_path)
-    if not terminal_checkpoint.is_file():
-        raise FileNotFoundError(
-            f"Lightning did not save the terminal checkpoint: {terminal_checkpoint}"
-        )
+    terminal_checkpoint = checkpoint.save_terminal_checkpoint(trainer)
     best_checkpoint = publish_best_checkpoint(
         checkpoint.best_model_path,
         run.checkpoint_dir,

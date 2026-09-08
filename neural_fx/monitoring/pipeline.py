@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import statistics
 import subprocess
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -15,10 +16,8 @@ import torch
 import torchaudio
 from torch import Tensor
 
-from ..analysis.benchmarking import cpu_name
 from ..data.audio import load_audio_pair
 from ..losses.audio_losses import MultiResolutionSTFTLoss
-from ..metrics import RELATIVE_METRICS, average_eligible, silence_policy_metadata
 from .execution import (
     latency_summary,
     load_artifact,
@@ -254,34 +253,7 @@ def monitor_artifact(
                     f"Case '{case.case_id}' prediction contains NaN or Inf",
                     category="execution",
                 )
-            prediction_peak = float(prediction.abs().max())
-            validation_checks.append(
-                _check(
-                    case.case_id,
-                    "prediction_amplitude",
-                    prediction_peak <= manifest.max_abs,
-                    f"prediction peak absolute amplitude is {prediction_peak:.6f}",
-                    severity="warning",
-                    value=prediction_peak,
-                )
-            )
-            prediction_clipped = int(
-                (prediction.abs() >= manifest.clipping_threshold).sum()
-            )
-            validation_checks.append(
-                _check(
-                    case.case_id,
-                    "prediction_clipping",
-                    prediction_clipped == 0,
-                    (
-                        f"prediction has {prediction_clipped} samples at or above "
-                        f"{manifest.clipping_threshold}"
-                    ),
-                    severity="warning",
-                    value=prediction_clipped,
-                )
-            )
-            metrics, diagnostics = quality_metrics(
+            metrics = quality_metrics(
                 prediction, target_batch, manifest, stft_loss
             )
             full_latency = measure_latency(
@@ -311,7 +283,6 @@ def monitor_artifact(
                         manifest.segment_length - manifest.burn_in_samples
                     ),
                     metrics=metrics,
-                    diagnostics=diagnostics,
                     latency=latency,
                 )
             )
@@ -320,18 +291,10 @@ def monitor_artifact(
     except (RuntimeError, TypeError, ValueError) as exc:
         raise MonitoringError(str(exc), category="execution") from exc
 
-    aggregate_quality = {}
-    relative_score_counts = {}
-    for metric in manifest.quality_metrics:
-        value, eligible_count, excluded_count = average_eligible(
-            [case.metrics[metric] for case in case_results]
-        )
-        aggregate_quality[metric] = value
-        if metric in RELATIVE_METRICS:
-            relative_score_counts[metric] = {
-                "eligible": eligible_count,
-                "excluded": excluded_count,
-            }
+    aggregate_quality = {
+        metric: statistics.fmean(case.metrics[metric] for case in case_results)
+        for metric in manifest.quality_metrics
+    }
     full_latency = latency_summary(
         aggregate_measurements, manifest.segment_length, manifest.sample_rate
     )
@@ -359,7 +322,7 @@ def monitor_artifact(
     device_name = (
         torch.cuda.get_device_name(resolved_device)
         if resolved_device.type == "cuda"
-        else cpu_name()
+        else platform.processor() or platform.machine()
     )
     warning_count = sum(
         not check.passed and check.severity == "warning"
@@ -370,7 +333,6 @@ def monitor_artifact(
         suite={
             "id": manifest.suite_id,
             "fingerprint": suite_fingerprint,
-            "silence_policy": silence_policy_metadata(),
             "manifest_path": str(manifest.manifest_path),
             "manifest_sha256": sha256_file(manifest.manifest_path),
             "cases": case_hashes,
@@ -381,11 +343,6 @@ def monitor_artifact(
             "path": str(artifact.path),
             "type": artifact.artifact_type,
             "inference_category": artifact.inference_category,
-            "effective_inference_chunk_size": (
-                manifest.inference_chunk_size
-                if artifact.artifact_type == "checkpoint"
-                else None
-            ),
             "sha256": sha256_file(artifact.path),
             "size_bytes": artifact_size,
             "config_path": str(Path(config_path).resolve()) if config_path else None,
@@ -404,7 +361,6 @@ def monitor_artifact(
             "device_class": resolved_device.type,
             "device_name": device_name,
             "dtype": "float32",
-            "torch_num_threads": torch.get_num_threads(),
         },
         workload={
             **manifest.settings_dict(),
@@ -415,10 +371,6 @@ def monitor_artifact(
         aggregate={
             "metrics": comparison_metrics,
             "quality": aggregate_quality,
-            "relative_score_counts": relative_score_counts,
-            "silent_case_count": sum(
-                case.diagnostics["digital_silence"] for case in case_results
-            ),
             "full_latency": full_latency,
             "memory": {
                 "peak_memory_bytes": peak_memory,
