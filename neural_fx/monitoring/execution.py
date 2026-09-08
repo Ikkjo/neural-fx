@@ -17,7 +17,8 @@ from torch import Tensor
 from ..artifacts import load_model
 from ..config import NeuralFXConfig, load_config
 from ..inference import run_inference
-from ..losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
+from ..losses.audio_losses import ESR, MultiResolutionSTFTLoss
+from ..metrics import scoring_diagnostics
 from .schema import MonitoringError, MonitoringManifest
 
 try:
@@ -208,25 +209,40 @@ def quality_metrics(
     target: Tensor,
     manifest: MonitoringManifest,
     stft_loss: MultiResolutionSTFTLoss,
-) -> dict[str, float]:
+) -> tuple[dict[str, float | None], dict[str, Any]]:
     prediction = prediction[..., manifest.burn_in_samples :]
     target = target[..., manifest.burn_in_samples :]
-    metrics: dict[str, float] = {}
+    diagnostics = scoring_diagnostics(prediction, target)
+    metrics: dict[str, float | None] = {}
     if "esr" in manifest.quality_metrics:
-        metrics["esr"] = float(
-            ESR(prediction, target, pre_emphasis_coeff=manifest.esr_pre_emphasis)
+        metrics["esr"] = (
+            None
+            if diagnostics["digital_silence"]
+            else float(
+                ESR(
+                    prediction,
+                    target,
+                    pre_emphasis_coeff=manifest.esr_pre_emphasis,
+                    mode=manifest.esr_mode,
+                )
+            )
         )
     if "mse" in manifest.quality_metrics:
-        metrics["mse"] = float(MSE(prediction, target))
+        metrics["mse"] = diagnostics["mse"]
     if "multi_resolution_stft_distance" in manifest.quality_metrics:
-        metrics["multi_resolution_stft_distance"] = float(
-            stft_loss(prediction, target)
+        metrics["multi_resolution_stft_distance"] = (
+            None
+            if diagnostics["digital_silence"]
+            else float(stft_loss(prediction, target))
         )
-    if any(not math.isfinite(value) for value in metrics.values()):
+    if any(
+        value is not None and not math.isfinite(float(value))
+        for value in metrics.values()
+    ):
         raise MonitoringError(
             "Monitoring produced a non-finite quality metric", category="execution"
         )
-    return metrics
+    return metrics, diagnostics
 
 
 def peak_rss_bytes() -> int | None:

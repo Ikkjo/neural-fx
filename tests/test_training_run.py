@@ -11,6 +11,7 @@ from neural_fx.training.run import (
     TrainingRun,
     _create_training_model,
     _generate_plots,
+    _training_callbacks,
     _validate_compile_request,
 )
 from scripts.train import _parse_args
@@ -31,6 +32,9 @@ def _config(
                 "epochs": 12,
                 "compile": compile,
                 "tbptt": {"enabled": tbptt},
+                "early_stopping_patience": 14,
+                "early_stopping_min_delta": 0.01,
+                "early_stopping_min_delta_mode": "relative",
             },
             "loss": {"type": "mse"},
             "data": {
@@ -54,6 +58,8 @@ def test_training_run_resolves_overrides_without_mutating_source_config() -> Non
         max_epochs=3,
         latency_manual=27,
         patience=0,
+        min_delta=0.02,
+        min_delta_mode="absolute",
         resume_path="resume.ckpt",
         compile=False,
     )
@@ -70,12 +76,38 @@ def test_training_run_resolves_overrides_without_mutating_source_config() -> Non
     assert run.checkpoint_dir == Path("runs")
     assert run.resume_path == Path("resume.ckpt")
     assert run.patience == 0
+    assert run.min_delta == 0.02
+    assert run.min_delta_mode == "absolute"
 
 
 def test_training_run_inherits_compile_setting_without_override() -> None:
     run = TrainingRun.resolve(_config(compile=True))
 
     assert run.config.training.compile is True
+
+
+def test_training_run_can_override_data_loader_workers() -> None:
+    config = _config()
+
+    run = TrainingRun.resolve(config, num_workers=0)
+
+    assert config.training.num_workers == 4
+    assert run.config.training.num_workers == 0
+    assert run.patience == 14
+    assert run.min_delta == 0.01
+    assert run.min_delta_mode == "relative"
+
+
+def test_relative_early_stopping_config_reaches_callback(tmp_path: Path) -> None:
+    run = TrainingRun.resolve(_config(), checkpoint_dir=tmp_path)
+
+    callbacks, _ = _training_callbacks(run, latency_calibration=None)
+    early_stopping = callbacks[1]
+
+    assert early_stopping.monitor == "train_loss"
+    assert early_stopping.patience == 14
+    assert early_stopping.relative_min_delta == pytest.approx(0.01)
+    assert early_stopping.min_delta_mode == "relative"
 
 
 @pytest.mark.parametrize(
@@ -88,6 +120,29 @@ def test_compile_cli_override(flag: str | None, expected: bool | None) -> None:
         argv.append(flag)
 
     assert _parse_args(argv).compile is expected
+
+
+def test_num_workers_cli_override() -> None:
+    assert _parse_args(["--config", "example.yaml", "--num-workers", "0"]).num_workers == 0
+
+
+def test_early_stopping_cli_overrides_are_parsed() -> None:
+    args = _parse_args(
+        [
+            "--config",
+            "config.yaml",
+            "--patience",
+            "20",
+            "--min_delta",
+            "0.005",
+            "--min_delta_mode",
+            "relative",
+        ]
+    )
+
+    assert args.patience == 20
+    assert args.min_delta == 0.005
+    assert args.min_delta_mode == "relative"
 
 
 def test_compiled_training_rejects_multiple_gpus() -> None:

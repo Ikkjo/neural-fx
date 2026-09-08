@@ -1,0 +1,49 @@
+version: '1.0'
+name: nano_44100_pearl_clean_sm57_wavenet_nano_seed42
+model:
+  type: wavenet
+  input_size: 1
+  output_size: 1
+  sample_rate: 44100
+  params:
+    layers: 6
+    stacks: 2
+    kernel_size: 2
+    dilation_channels: 8
+    residual_channels: 8
+    skip_channels: 16
+training:
+  batch_size: 16
+  epochs: 400
+  segment_length: 8192
+  compile: true
+  num_workers: 4
+  seed: 42
+  deterministic: true
+  early_stopping: false
+optimizer:
+  type: adam
+  lr: 0.001
+lr_scheduler:
+  type: exponential
+  gamma: 0.995
+loss:
+  type: mse
+  mask_first: 127
+data:
+  normalize: true
+  train:
+    input: local/nano_44100/data/pearl_clean_sm57/data/train/input.wav
+    target: local/nano_44100/data/pearl_clean_sm57/data/train/target.wav
+  val:
+    input: local/nano_44100/data/pearl_clean_sm57/data/val/input.wav
+    target: local/nano_44100/data/pearl_clean_sm57/data/val/target.wav
+latency:
+  method: manual
+  manual_delay: 0
+  calibration_duration_seconds: 0
+validation:
+  enabled: true
+  check_clipping: true
+  check_dc_offset: true
+  ignore_warnings: false

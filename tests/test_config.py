@@ -108,6 +108,118 @@ def test_training_compile_setting(training: dict, expected: bool) -> None:
     assert config.training.compile is expected
 
 
+def test_relative_early_stopping_settings_are_loaded() -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "relative-early-stopping",
+            "model": {"type": "lstm", "params": {"hidden_size": 8}},
+            "training": {
+                "early_stopping": True,
+                "early_stopping_patience": 20,
+                "early_stopping_min_delta": 0.005,
+                "early_stopping_min_delta_mode": "relative",
+            },
+            "loss": {"type": "mse"},
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+        }
+    )
+
+    assert config.training.early_stopping is True
+    assert config.training.early_stopping_patience == 20
+    assert config.training.early_stopping_min_delta == 0.005
+    assert config.training.early_stopping_min_delta_mode == "relative"
+
+
+def test_nam_esr_mode_is_loaded_without_changing_the_default() -> None:
+    base = {
+        "version": "1.0",
+        "name": "esr-mode",
+        "model": {"type": "lstm", "params": {"hidden_size": 8}},
+        "training": {},
+        "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+    }
+
+    assert config_from_dict({**base, "loss": {"type": "mse"}}).loss.esr_mode == "legacy"
+    assert (
+        config_from_dict({**base, "loss": {"type": "mse", "esr_mode": "nam"}})
+        .loss.esr_mode
+        == "nam"
+    )
+    with pytest.raises(ValueError, match="esr_mode"):
+        config_from_dict({**base, "loss": {"type": "mse", "esr_mode": "other"}})
+
+
+def test_nam_recipe_training_options_are_opt_in() -> None:
+    config = config_from_dict(
+        {
+            "version": "1.0",
+            "name": "nam-recipe",
+            "model": {"type": "wavenet", "params": {"layers": 6}},
+            "training": {
+                "validation_segment_length": 65_536,
+                "use_receptive_field_context": True,
+            },
+            "optimizer": {
+                "type": "adam",
+                "lr": 0.004,
+                "weight_decay": 3.17e-7,
+            },
+            "loss": {
+                "type": "combined",
+                "weights": {"mse": 1.0, "esr": 0.0, "stft": 0.0005},
+                "stft": {"enabled": True, "mode": "nam"},
+            },
+            "validation_loss": {
+                "type": "combined",
+                "weights": {"mse": 0.0, "esr": 1.0, "stft": 0.0},
+                "esr_mode": "nam",
+                "mask_first": 4096,
+            },
+            "data": {"train": {"input": "input.wav", "target": "target.wav"}},
+        }
+    )
+
+    assert config.training.validation_segment_length == 65_536
+    assert config.training.use_receptive_field_context is True
+    assert config.optimizer.weight_decay == pytest.approx(3.17e-7)
+    assert config.loss.stft is not None
+    assert config.loss.stft.mode == "nam"
+    assert config.loss.stft.hop_sizes is None
+    assert config.validation_loss is not None
+    assert config.validation_loss.esr_mode == "nam"
+    assert config.validation_loss.mask_first == 4096
+
+
+@pytest.mark.parametrize(
+    ("training", "message"),
+    [
+        ({"early_stopping_patience": -1}, "patience cannot be negative"),
+        ({"early_stopping_min_delta": -0.1}, "min_delta cannot be negative"),
+        (
+            {"early_stopping_min_delta_mode": "percentage"},
+            "must be 'absolute' or 'relative'",
+        ),
+    ],
+)
+def test_invalid_early_stopping_settings_are_rejected(
+    training: dict, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        config_from_dict(
+            {
+                "version": "1.0",
+                "name": "invalid-early-stopping",
+                "model": {"type": "lstm", "params": {"hidden_size": 8}},
+                "training": training,
+                "loss": {"type": "mse"},
+                "data": {
+                    "train": {"input": "input.wav", "target": "target.wav"}
+                },
+            }
+        )
+
+
 @pytest.mark.parametrize(
     "path",
     [

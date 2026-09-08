@@ -205,6 +205,38 @@ class TestAudioDataset:
             assert x.shape == (segment_length,)
             assert y.shape == (segment_length,)
 
+    def test_dataset_includes_preceding_input_context(self, temp_audio_files):
+        input_path, target_path, sample_rate = temp_audio_files
+        dataset = AudioDataset(
+            input_path=input_path,
+            target_path=target_path,
+            segment_length=8192,
+            sample_rate=sample_rate,
+            normalize=False,
+            input_context=6141,
+        )
+
+        x, y = dataset[0]
+
+        assert x.shape == (14_333,)
+        assert y.shape == (8192,)
+        torch.testing.assert_close(x[6141:], dataset.input_audio[0, 6141:14_333])
+        torch.testing.assert_close(y, dataset.target_audio[0, 6141:14_333])
+
+    def test_dataset_can_include_final_partial_segment(self, temp_audio_files):
+        input_path, target_path, sample_rate = temp_audio_files
+        dataset = AudioDataset(
+            input_path=input_path,
+            target_path=target_path,
+            segment_length=65_536,
+            sample_rate=sample_rate,
+            include_partial_segment=True,
+        )
+
+        assert len(dataset) == 2
+        x, y = dataset[1]
+        assert x.shape == y.shape == (96_000 - 65_536,)
+
     def test_dataset_stereo_to_mono(self, temp_audio_files):
         """Test that stereo audio is converted to mono."""
         input_path, target_path, sample_rate = temp_audio_files

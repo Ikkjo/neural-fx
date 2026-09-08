@@ -1,0 +1,11 @@
+schema_version: '1.0'
+experiment_id: full-rig-delay-neg041-44100-seed42
+experiment: configs/experiments/full_rig_delay_neg041_44100/experiment.yaml
+runs:
+- id: full_rig_delay_neg041_44100_full_rig_delay_neg041_wavenet_12k_seed42
+  target: full_rig_delay_neg041
+  model_id: wavenet_12k
+  model_type: wavenet
+  config: configs/experiments/full_rig_delay_neg041_44100/runs/full_rig_delay_neg041/wavenet_12k.yaml
+  evaluation_manifest: configs/experiments/full_rig_delay_neg041_44100/evaluations/full_rig_delay_neg041/wavenet_12k.yaml
+  checkpoint: local/full_rig_delay_neg041_44100/checkpoints/full_rig_delay_neg041_44100_full_rig_delay_neg041_wavenet_12k_seed42/best.ckpt

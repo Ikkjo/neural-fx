@@ -32,7 +32,13 @@ from neural_fx.data.transforms import (
     RandomGain,
     build_augmentation_transform,
 )
-from neural_fx.losses.audio_losses import ESR, MSE, MultiResolutionSTFTLoss
+from neural_fx.losses.audio_losses import (
+    ESR,
+    MSE,
+    MultiResolutionSTFTLoss,
+    pre_emphasis_filter,
+    stft_loss,
+)
 from neural_fx.models import create_model_from_config
 from neural_fx.models.recurrent import NeuralfxLSTM
 from neural_fx.preprocessing.latency import LatencyCalibration
@@ -64,6 +70,62 @@ class TestModelCreation:
         object.__setattr__(config, "type", "unknown")
         with pytest.raises(ValueError):
             create_model_from_config(config)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+    def test_lstm_accepts_long_cuda_validation_chunks(self):
+        config = ModelConfig(
+            type="lstm",
+            params=LSTMParams(hidden_size=40, num_layers=1, skip_connection=True),
+            input_size=1,
+            output_size=1,
+            sample_rate=44_100,
+        )
+        model = create_model_from_config(config).cuda()
+
+        assert model(torch.randn(1, 1, 65_536, device="cuda")).shape == (
+            1,
+            1,
+            65_536,
+        )
+
+
+def test_nam_esr_averages_per_item_and_matches_its_gradient() -> None:
+    target = torch.tensor([[1.0, 1.0], [10.0, 10.0]])
+    prediction = (target + 1.0).requires_grad_()
+
+    actual = ESR(prediction, target, pre_emphasis_coeff=None, mode="nam")
+    expected = torch.mean(
+        torch.mean((prediction - target).square(), dim=1)
+        / torch.mean(target.square(), dim=1)
+    )
+    actual_gradient = torch.autograd.grad(actual, prediction)[0]
+    expected_gradient = torch.autograd.grad(expected, prediction)[0]
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    torch.testing.assert_close(actual_gradient, expected_gradient, rtol=0, atol=0)
+    assert actual != ESR(prediction.detach(), target, pre_emphasis_coeff=None)
+
+
+def test_nam_esr_keeps_nam_pre_emphasis_and_zero_energy_behavior() -> None:
+    signal = torch.tensor([[[1.0, 3.0, 7.0]]])
+
+    filtered = pre_emphasis_filter(signal, 0.5, mode="nam")
+
+    torch.testing.assert_close(filtered, torch.tensor([[[2.5, 5.5]]]))
+    assert filtered.shape[-1] == signal.shape[-1] - 1
+    assert torch.isinf(
+        ESR(torch.ones(1, 2), torch.zeros(1, 2), pre_emphasis_coeff=None, mode="nam")
+    )
+    assert torch.isnan(
+        ESR(torch.zeros(1, 2), torch.zeros(1, 2), pre_emphasis_coeff=None, mode="nam")
+    )
+    with pytest.raises(ValueError, match="mono"):
+        ESR(
+            torch.ones(1, 2, 2),
+            torch.ones(1, 2, 2),
+            pre_emphasis_coeff=None,
+            mode="nam",
+        )
 
 
 class TestAugmentations:
@@ -172,6 +234,64 @@ class TestMultiResolutionSTFTLoss:
         loss = MultiResolutionSTFTLoss()
         assert loss.stft_losses is not None
         assert len(loss.stft_losses) == 3
+
+    def test_nam_stft_loss_uses_pinned_auraloss_resolutions(self):
+        loss = MultiResolutionSTFTLoss(mode="nam")
+
+        assert [item.fft_size for item in loss.stft_losses] == [1024, 2048, 512]
+        assert [item.hop_size for item in loss.stft_losses] == [120, 240, 50]
+        assert [item.win_size for item in loss.stft_losses] == [600, 1200, 240]
+
+    def test_nam_stft_padding_matches_native_centered_reflection(self):
+        prediction = torch.randn(2, 1, 2048)
+        target = torch.randn(2, 1, 2048)
+        window = torch.hann_window(256)
+        actual = stft_loss(
+            prediction, target, 512, 100, 256, window, mode="nam"
+        )
+
+        magnitudes = []
+        for signal in (prediction.squeeze(1), target.squeeze(1)):
+            spectrum = torch.stft(
+                signal,
+                n_fft=512,
+                hop_length=100,
+                win_length=256,
+                window=window,
+                return_complex=True,
+            )
+            magnitudes.append(
+                torch.sqrt(torch.clamp(spectrum.real**2 + spectrum.imag**2, min=1e-8))
+            )
+        predicted_magnitude, target_magnitude = magnitudes
+        expected = (
+            torch.norm(target_magnitude - predicted_magnitude, p="fro")
+            / torch.norm(target_magnitude, p="fro"),
+            torch.nn.functional.l1_loss(
+                torch.log(predicted_magnitude), torch.log(target_magnitude)
+            ),
+        )
+
+        torch.testing.assert_close(actual, expected)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+    def test_nam_stft_loss_moves_windows_to_the_prediction_device(self):
+        loss = MultiResolutionSTFTLoss(
+            fft_sizes=[256], hop_sizes=[64], win_sizes=[128], mode="nam"
+        )
+        signal = torch.randn(1, 1, 1024, device="cuda")
+
+        previous = torch.are_deterministic_algorithms_enabled()
+        torch.use_deterministic_algorithms(True)
+        try:
+            signal.requires_grad_()
+            actual = loss(signal, signal)
+            actual.backward()
+        finally:
+            torch.use_deterministic_algorithms(previous)
+
+        assert actual.device.type == "cuda"
+        assert loss.stft_losses[0].window.device.type == "cuda"
 
     def test_stft_loss_forward(self):
         """Test STFT loss forward pass."""
@@ -528,6 +648,35 @@ class TestUpdatedLossWeights:
             ESR(pred, target, pre_emphasis_coeff=0.2),
         )
 
+    def test_tbptt_scores_nam_esr_over_the_full_segment(self, base_config):
+        class StatefulIdentity(torch.nn.Module):
+            def forward(self, x):
+                return x
+
+            def reset_state(self):
+                pass
+
+            def detach_state(self):
+                pass
+
+        base_config.training.tbptt = TBPTTConfig(enabled=True)
+        base_config.loss.weights = LossWeights(esr=1.0, mse=0.0, stft=0.0)
+        base_config.loss.esr_mode = "nam"
+        base_config.loss.pre_emphasis = PreEmphasisConfig(enabled=False)
+        module = NeuralFXModule(StatefulIdentity(), base_config)
+        prediction = torch.tensor([[2.0, 2.0, 11.0, 11.0]])
+        target = torch.tensor([[1.0, 1.0, 10.0, 10.0]])
+
+        actual = module.training_step((prediction, target), batch_idx=0)
+        expected = ESR(
+            prediction.unsqueeze(1),
+            target.unsqueeze(1),
+            pre_emphasis_coeff=None,
+            mode="nam",
+        )
+
+        torch.testing.assert_close(actual, expected)
+
     def test_loss_mask_controls_burn_in(self, base_config):
         """Loss masking is owned by loss.mask_first, not TBPTT warm-up config."""
         base_config.loss.mask_first = 123
@@ -536,6 +685,52 @@ class TestUpdatedLossWeights:
         module = NeuralFXModule(NeuralfxLSTM(base_config.model), base_config)
 
         assert module.burn_in == 123
+
+    def test_validation_scores_one_continuous_stream_with_one_burn_in(
+        self, base_config
+    ):
+        class StatefulIdentity(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.reset_count = 0
+
+            def forward(self, x):
+                return x
+
+            def reset_state(self):
+                self.reset_count += 1
+
+        base_config.validation_loss = LossConfig(
+            type="combined",
+            weights=LossWeights(esr=1.0, mse=0.0, stft=0.0),
+            esr_mode="nam",
+            pre_emphasis=PreEmphasisConfig(enabled=False),
+            mask_first=2,
+        )
+        model = StatefulIdentity()
+        module = NeuralFXModule(model, base_config)
+        logged = {}
+        module.log = lambda name, value, **_: logged.__setitem__(name, value)
+        prediction = torch.tensor([[9.0, 9.0, 3.0, 4.0, 5.0, 6.0]])
+        target = torch.tensor([[1.0, 1.0, 2.0, 4.0, 4.0, 8.0]])
+
+        module.on_validation_epoch_start()
+        for index in range(2):
+            start = index * 3
+            module.validation_step(
+                (prediction[:, start : start + 3], target[:, start : start + 3]),
+                index,
+            )
+        module.on_validation_epoch_end()
+
+        expected = ESR(
+            prediction[:, 2:].unsqueeze(1),
+            target[:, 2:].unsqueeze(1),
+            pre_emphasis_coeff=None,
+            mode="nam",
+        )
+        torch.testing.assert_close(logged["val_loss"], expected)
+        assert model.reset_count == 1
 
 
 class TestValidationSupport:
