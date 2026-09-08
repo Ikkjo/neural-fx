@@ -5,7 +5,7 @@ are repository-root-relative references to files published with this evidence
 package or tracked by the repository. They are the paths to use when inspecting
 the saved results.
 
-The `private-curated-dataset/` paths in evaluation metadata identify the source
+The `dataset/` paths in evaluation metadata identify the source
 segments used to produce the results. The private source files are not
 published, so those paths are provenance only and are expected not to resolve in
 this checkout.

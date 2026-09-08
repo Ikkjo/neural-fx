@@ -34,8 +34,8 @@
     "state_reset_count": 1
   },
   "dataset": {
-    "input_audio": "private-curated-dataset/full_rig/data/test/input.wav",
-    "target_audio": "private-curated-dataset/full_rig/data/test/target.wav",
+    "input_audio": "dataset/full_rig/data/test/input.wav",
+    "target_audio": "dataset/full_rig/data/test/target.wav",
     "split": "test",
     "start_sample": 0,
     "num_samples": 3907584,
