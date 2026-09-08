@@ -1,7 +1,6 @@
 # TAMU artifact comparison
 
-Scenario: `controlled_rollback_failure`. This is a controlled rollback failure, not a claim that the historical artifact was deployed after the baseline.
-
+Scenario: `controlled_rollback_failure`.
 Suite `tamu-ds1-gain-75-validation` (`65e1f2a131e0a259018d6c785ca0718ee397dce2145f8eebd2e80efe9333b8ea`). Both reports used `native_stateful` inference, chunk `8192`, dtype `float32`, on `x86_64`.
 
 Baseline `3f9a8875913e12fc059de1ed28489a426c998f965aa244400b465ef89b3f0f37`: `artifacts/gear_comparison_44100/checkpoints/gear_comparison_44100_ds1_gain_75_lstm_7k_seed42/best.ckpt`. Candidate `706c11e9ea96f4a1f4939be541f53480abebeb3f65fc0d0308515d126b96bcc5`: `artifacts/gear_comparison_44100/checkpoints/issue4_ds1_gain_75_lstm_nano_seed42/best.ckpt`.
@@ -26,4 +25,4 @@ Baseline `3f9a8875913e12fc059de1ed28489a426c998f965aa244400b465ef89b3f0f37`: `ar
 | investigate | peak_memory_bytes | 0.30054% | 20% | no |
 | investigate | artifact_size_bytes | -42.4613% | 10% | no |
 
-Decision: **reject**. Retain the accepted baseline, do not promote the candidate, inspect version/config differences, correct the candidate, and rerun the same validation suite before reconsideration.
+Decision: **reject**.
